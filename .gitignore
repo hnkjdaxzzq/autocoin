@@ -35,6 +35,9 @@ Thumbs.db
 # Data files (user-specific bills)
 data/
 
+# Test images (private transaction screenshots)
+testimg/
+
 # Mosaic scripts
 analyze_img*.py
 mosaic_screenshots.py

@@ -39,8 +39,10 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == body.username).first()
-    if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名不存在")
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="密码错误")
     token = create_access_token(user.id, user.username)
     return TokenResponse(access_token=token, username=user.username)
 

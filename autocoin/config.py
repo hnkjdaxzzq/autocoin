@@ -33,8 +33,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
 
     # 智谱 GLM (OpenAI-compatible)
+    # Image limits per model:
+    #   GLM-4.1V-Thinking-Flash: FREE, supports base64 & URL (recommended)
+    #   glm-4v-plus-0111: max 5 images/request, supports base64 & URL
+    #   glm-4v-flash: FREE but max 1 image, URL only (no base64)
     zhipu_api_key: str = ""
-    zhipu_model: str = "glm-4v-flash"  # free tier; glm-4v-plus for better quality
+    zhipu_model: str = "GLM-4.1V-Thinking-Flash"
     zhipu_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
 
     # 通义千问 Qwen VL (OpenAI-compatible)
@@ -42,9 +46,9 @@ class Settings(BaseSettings):
     qwen_model: str = "qwen-vl-max"  # qwen-vl-plus for cheaper option
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-    # Deepseek (OpenAI-compatible)
+    # Deepseek (OpenAI-compatible) — text only, no vision support
     deepseek_api_key: str = ""
-    deepseek_model: str = "deepseek-chat"  # V3 with vision
+    deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com"
 
     # Daily image import limit per user (number of images successfully imported)

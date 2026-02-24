@@ -44,10 +44,11 @@ EXTRACTION_PROMPT = """你是一个专业的记账助手。请仔细分析这张
 重要规则：
 1. amount 必须是正数
 2. direction: 花钱为 "expense"，收钱为 "income"，其他为 "neutral"
-3. transaction_time: 如果图片中没有完整时间，用今天的日期 + "00:00:00"
-4. 如果图片中有多条交易记录，全部提取
-5. 如果无法识别任何交易信息，返回空数组 []
-6. 只返回 JSON 数组，不要返回其他内容
+3. 信用卡账单特殊规则：信用卡账单中 +（正数）表示消费/支出（direction="expense"），-（负数）表示还款或退款（direction="income"）
+4. transaction_time: 如果图片中没有完整时间，用今天的日期 + "00:00:00"
+5. 如果图片中有多条交易记录，全部提取
+6. 如果无法识别任何交易信息，返回空数组 []
+7. 只返回 JSON 数组，不要返回其他内容
 
 今天的日期是：{today}
 """
@@ -55,7 +56,7 @@ EXTRACTION_PROMPT = """你是一个专业的记账助手。请仔细分析这张
 
 def _get_extraction_prompt() -> str:
     """Build the extraction prompt with today's date."""
-    return EXTRACTION_PROMPT.format(today=datetime.now().strftime("%Y-%m-%d"))
+    return EXTRACTION_PROMPT.replace("{today}", datetime.now().strftime("%Y-%m-%d"))
 
 
 def _encode_image(image_bytes: bytes, content_type: str) -> str:
@@ -165,6 +166,14 @@ def _needs_proxy(provider_name: str) -> bool:
     return provider_name in ("openai", "gemini")
 
 
+# Maximum images per single API call, by provider.
+# When more images are uploaded, we split into batches.
+_MAX_IMAGES_PER_REQUEST: dict = {
+    "zhipu": 5,     # glm-4v-plus-0111 limit
+    # Other providers: no hard split needed (OpenAI supports many)
+}
+
+
 class OpenAICompatibleRecognizer(ImageRecognizer):
     """
     Recognizer using OpenAI-compatible chat completions API.
@@ -178,6 +187,27 @@ class OpenAICompatibleRecognizer(ImageRecognizer):
         self._provider_name = provider_name
 
     async def recognize(
+        self, images: list[tuple[bytes, str]]
+    ) -> list[dict]:
+        # Split into batches if the provider has per-request image limits
+        batch_size = _MAX_IMAGES_PER_REQUEST.get(self._provider_name)
+        if batch_size and len(images) > batch_size:
+            all_txs: list[dict] = []
+            for i in range(0, len(images), batch_size):
+                batch = images[i : i + batch_size]
+                logger.info(
+                    "%s: processing batch %d/%d (%d images)",
+                    self._provider_name,
+                    i // batch_size + 1,
+                    (len(images) + batch_size - 1) // batch_size,
+                    len(batch),
+                )
+                txs = await self._recognize_single(batch)
+                all_txs.extend(txs)
+            return all_txs
+        return await self._recognize_single(images)
+
+    async def _recognize_single(
         self, images: list[tuple[bytes, str]]
     ) -> list[dict]:
         try:
@@ -211,6 +241,13 @@ class OpenAICompatibleRecognizer(ImageRecognizer):
                     proxy=proxy_url,
                     timeout=timeout_sec,
                 )
+        else:
+            # For Chinese providers, explicitly disable proxy so the SDK
+            # doesn't auto-detect SOCKS proxies from ALL_PROXY etc.
+            client_kwargs["http_client"] = httpx.AsyncClient(
+                timeout=timeout_sec,
+                trust_env=False,
+            )
 
         client = AsyncOpenAI(**client_kwargs)
 
@@ -219,13 +256,17 @@ class OpenAICompatibleRecognizer(ImageRecognizer):
 
         for img_bytes, content_type in images:
             b64 = _encode_image(img_bytes, content_type)
+            image_url_obj: dict = {}
+            if self._provider_name == "zhipu":
+                # Zhipu: raw base64 (no data-URI prefix), no "detail" key
+                image_url_obj["url"] = b64
+            else:
+                image_url_obj["url"] = f"data:{content_type};base64,{b64}"
+                image_url_obj["detail"] = "high"
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{content_type};base64,{b64}",
-                        "detail": "high",
-                    },
+                    "image_url": image_url_obj,
                 }
             )
 
