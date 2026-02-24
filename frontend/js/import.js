@@ -29,6 +29,7 @@ const Import = {
 
       <!-- Image import panel -->
       <div id="tab-image" class="import-tab-panel">
+        <div id="img-quota-bar" class="img-quota-bar" style="display:none"></div>
         <div id="img-drop-zone" class="drop-zone">
           <div class="drop-hint">📷 拖拽图片到此处</div>
           <div class="drop-sub">支持 JPG / PNG / WebP，单次最多 10 张</div>
@@ -60,6 +61,7 @@ const Import = {
     Import._bindDrop(container);
     Import._bindImageDrop(container);
     Import._loadHistory(container);
+    Import._loadImageQuota(container);
   },
 
   /* ---- Tab switching ---- */
@@ -164,6 +166,24 @@ const Import = {
     });
   },
 
+  async _loadImageQuota(container) {
+    const bar = container.querySelector("#img-quota-bar");
+    if (!bar) return;
+    try {
+      const q = await API.imports.imageQuota();
+      Import._quotaData = q;
+      const remaining = q.remaining;
+      bar.style.display = "";
+      if (remaining <= 0) {
+        bar.className = "img-quota-bar img-quota-bar--exhausted";
+        bar.innerHTML = `⚠️ 今日图片导入额度已用完（${q.daily_used}/${q.daily_limit}），请明天再试`;
+      } else {
+        bar.className = "img-quota-bar";
+        bar.innerHTML = `今日图片导入额度：已用 <strong>${q.daily_used}</strong> / ${q.daily_limit} 张，剩余 <strong>${remaining}</strong> 张`;
+      }
+    } catch (_) { bar.style.display = "none"; }
+  },
+
   async _handleImageFiles(files, container) {
     if (files.length > 10) {
       alert("最多同时上传 10 张图片");
@@ -215,6 +235,12 @@ const Import = {
       if (Import._recognizedTransactions.length === 0) {
         statusEl.innerHTML = `<div class="img-recognize-empty">未能从图片中识别出交易记录，请检查图片内容</div>`;
         return;
+      }
+
+      // Update quota display after recognition
+      if (response.daily_used != null && response.daily_limit != null) {
+        Import._quotaData = { daily_used: response.daily_used, daily_limit: response.daily_limit, remaining: Math.max(0, response.daily_limit - response.daily_used) };
+        Import._loadImageQuota(container);
       }
 
       statusEl.innerHTML = `
@@ -425,6 +451,7 @@ const Import = {
       container.querySelector("#img-preview-list").innerHTML = "";
       Import._recognizedTransactions = [];
       Import._loadHistory(container);
+      Import._loadImageQuota(container);
     } catch (err) {
       btn.disabled = false;
       btn.textContent = `确认导入 (${txsToImport.length})`;

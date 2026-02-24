@@ -76,16 +76,37 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "im
 MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20 MB per image
 
 
+@router.get("/image/quota")
+def get_image_quota(repo: SQLiteRepository = Depends(get_repo)):
+    """Return today's image import usage and limit."""
+    from autocoin.config import settings as _settings
+    daily_limit = _settings.image_import_daily_limit
+    daily_used = repo.count_today_image_imports()
+    return {"daily_used": daily_used, "daily_limit": daily_limit, "remaining": max(0, daily_limit - daily_used)}
+
+
 @router.post("/image/recognize", response_model=ImageRecognizeResponse)
 async def recognize_images(
     files: list[UploadFile] = File(...),
     _user: User = Depends(get_current_user),
+    repo: SQLiteRepository = Depends(get_repo),
 ):
     """Upload one or more images and recognize transactions via LLM."""
+    from autocoin.config import settings as _settings
+
     if not files:
         raise HTTPException(status_code=400, detail="No images provided")
     if len(files) > 10:
         raise HTTPException(status_code=400, detail="最多同时上传 10 张图片")
+
+    # Check daily image import quota
+    daily_limit = _settings.image_import_daily_limit
+    daily_used = repo.count_today_image_imports()
+    if daily_used >= daily_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"今日图片导入已达上限（{daily_limit} 张），请明天再试",
+        )
 
     images: list[tuple[bytes, str]] = []
     for f in files:
@@ -117,6 +138,8 @@ async def recognize_images(
     return ImageRecognizeResponse(
         transactions=[ImageTransactionItem(**t) for t in transactions],
         image_count=len(images),
+        daily_used=daily_used,
+        daily_limit=daily_limit,
     )
 
 
@@ -126,8 +149,25 @@ async def confirm_image_import(
     repo: SQLiteRepository = Depends(get_repo),
 ):
     """Confirm and import recognized transactions from images."""
+    from autocoin.config import settings as _settings
+
     if not transactions:
         raise HTTPException(status_code=400, detail="No transactions to import")
+
+    # Check daily quota again before actually importing
+    daily_limit = _settings.image_import_daily_limit
+    daily_used = repo.count_today_image_imports()
+    remaining = max(0, daily_limit - daily_used)
+    if remaining <= 0:
+        raise HTTPException(
+            status_code=429,
+            detail=f"今日图片导入已达上限（{daily_limit} 张），请明天再试",
+        )
+    if len(transactions) > remaining:
+        raise HTTPException(
+            status_code=429,
+            detail=f"今日剩余配额 {remaining} 条，但您尝试导入 {len(transactions)} 条",
+        )
 
     batch_id = str(uuid.uuid4())
     repo.create_import_batch(

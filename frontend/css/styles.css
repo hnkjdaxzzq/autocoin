@@ -903,6 +903,21 @@ tr:hover td { background: #fafbfc; }
   margin-bottom: 16px;
 }
 
+/* ===== Image quota bar ===== */
+.img-quota-bar {
+  padding: 10px 16px;
+  background: #eff6ff;
+  border-radius: var(--radius);
+  color: #1e40af;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.img-quota-bar--exhausted {
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 600;
+}
+
 /* ===== Image Preview Table ===== */
 .img-preview-card {
   margin-bottom: 20px;

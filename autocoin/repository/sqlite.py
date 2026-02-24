@@ -429,3 +429,17 @@ class SQLiteRepository(DataRepository):
             .all()
         )
         return [_batch_to_dict(b) for b in batches]
+
+    def count_today_image_imports(self) -> int:
+        """Count image-source imported_rows for today (UTC) for this user."""
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = (
+            self._db.query(func.coalesce(func.sum(ImportBatch.imported_rows), 0))
+            .filter(
+                ImportBatch.user_id == self._user_id,
+                ImportBatch.source == "image",
+                ImportBatch.imported_at >= today_start,
+            )
+            .scalar()
+        )
+        return int(result)

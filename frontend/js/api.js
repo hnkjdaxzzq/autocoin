@@ -143,6 +143,7 @@ const API = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transactions }),
       }),
+    imageQuota: () => apiFetch("/imports/image/quota"),
   },
   stats: {
     summary: (params) =>
