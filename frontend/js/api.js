@@ -1,11 +1,34 @@
+/* ===== Auth Token Management ===== */
+const Auth = {
+  getToken() { return localStorage.getItem("autocoin_token"); },
+  setToken(token) { localStorage.setItem("autocoin_token", token); },
+  getUsername() { return localStorage.getItem("autocoin_username"); },
+  setUsername(name) { localStorage.setItem("autocoin_username", name); },
+  clear() {
+    localStorage.removeItem("autocoin_token");
+    localStorage.removeItem("autocoin_username");
+  },
+  isLoggedIn() { return !!this.getToken(); },
+};
+
 /* ===== API client ===== */
 const API_BASE = "/api/v1";
 
 async function apiFetch(path, options = {}) {
-  const res = await fetch(API_BASE + path, {
-    headers: options.headers || {},
-    ...options,
-  });
+  const token = Auth.getToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(API_BASE + path, { ...options, headers });
+
+  if (res.status === 401) {
+    Auth.clear();
+    window.location.hash = "#/login";
+    throw new Error("请先登录");
+  }
+
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
@@ -15,6 +38,21 @@ async function apiFetch(path, options = {}) {
 }
 
 const API = {
+  auth: {
+    register: (body) =>
+      apiFetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    login: (body) =>
+      apiFetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    me: () => apiFetch("/auth/me"),
+  },
   transactions: {
     list: (params) =>
       apiFetch("/transactions?" + new URLSearchParams(
@@ -37,10 +75,22 @@ const API = {
   },
   imports: {
     upload: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch(API_BASE + "/imports", {
         method: "POST",
+        headers,
         body: formData,
       });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
@@ -50,6 +100,49 @@ const API = {
     },
     list: () => apiFetch("/imports"),
     get: (id) => apiFetch(`/imports/${id}`),
+    recognizeImages: async (formData, { timeoutMs = 90000 } = {}) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      let res;
+      try {
+        res = await fetch(API_BASE + "/imports/image/recognize", {
+          method: "POST",
+          headers,
+          body: formData,
+          signal: controller.signal,
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        if (e.name === "AbortError") throw new Error("识别请求超时，请稍后重试或减少图片数量");
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    confirmImageImport: (transactions) =>
+      apiFetch("/imports/image/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions }),
+      }),
   },
   stats: {
     summary: (params) =>

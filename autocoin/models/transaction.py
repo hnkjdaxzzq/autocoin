@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, event
-from sqlalchemy.orm import Mapper
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, UniqueConstraint
 
 from autocoin.database import Base
 
@@ -10,6 +9,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
     source = Column(String(20), nullable=False, index=True)          # 'alipay' | 'wechat'
     source_order_id = Column(String(64), nullable=True)
     merchant_order_id = Column(String(64), nullable=True)
@@ -30,6 +30,5 @@ class Transaction(Base):
     is_deleted = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
-        # Deduplication constraint
-        __import__("sqlalchemy").UniqueConstraint("source", "source_order_id", name="uq_source_order"),
+        UniqueConstraint("user_id", "source", "source_order_id", name="uq_user_source_order"),
     )

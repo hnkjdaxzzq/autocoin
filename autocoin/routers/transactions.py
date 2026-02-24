@@ -4,7 +4,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from autocoin.auth import get_current_user
 from autocoin.database import get_db
+from autocoin.models.user import User
 from autocoin.repository.sqlite import SQLiteRepository
 from autocoin.schemas.transaction import (
     TransactionCreate,
@@ -16,8 +18,11 @@ from autocoin.schemas.transaction import (
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-def get_repo(db: Session = Depends(get_db)) -> SQLiteRepository:
-    return SQLiteRepository(db)
+def get_repo(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SQLiteRepository:
+    return SQLiteRepository(db, user.id)
 
 
 @router.get("", response_model=TransactionListResponse)

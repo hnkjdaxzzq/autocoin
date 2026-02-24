@@ -1,7 +1,7 @@
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import text, func, or_, and_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -49,8 +49,9 @@ def _batch_to_dict(b: ImportBatch) -> dict:
 
 class SQLiteRepository(DataRepository):
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: int):
         self._db = db
+        self._user_id = user_id
 
     # ---------- Transactions ----------
 
@@ -63,7 +64,10 @@ class SQLiteRepository(DataRepository):
         source=None,
         search=None,
     ):
-        q = self._db.query(Transaction).filter(Transaction.is_deleted == 0)
+        q = self._db.query(Transaction).filter(
+            Transaction.is_deleted == 0,
+            Transaction.user_id == self._user_id,
+        )
 
         if start_date:
             q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
@@ -117,13 +121,17 @@ class SQLiteRepository(DataRepository):
 
     def get_transaction(self, id: int) -> Optional[dict]:
         tx = self._db.query(Transaction).filter(
-            Transaction.id == id, Transaction.is_deleted == 0
+            Transaction.id == id,
+            Transaction.user_id == self._user_id,
+            Transaction.is_deleted == 0,
         ).first()
         return _tx_to_dict(tx) if tx else None
 
     def update_transaction(self, id: int, data: dict) -> Optional[dict]:
         tx = self._db.query(Transaction).filter(
-            Transaction.id == id, Transaction.is_deleted == 0
+            Transaction.id == id,
+            Transaction.user_id == self._user_id,
+            Transaction.is_deleted == 0,
         ).first()
         if not tx:
             return None
@@ -139,8 +147,9 @@ class SQLiteRepository(DataRepository):
     def create_transaction(self, data: dict) -> dict:
         now = datetime.utcnow()
         tx = Transaction(
+            user_id=self._user_id,
             source=data.get("source", "manual"),
-            source_order_id=data.get("source_order_id", f"manual_{now.strftime('%Y%m%d%H%M%S%f')}"),
+            source_order_id=data.get("source_order_id") or f"manual_{now.strftime('%Y%m%d%H%M%S%f')}",
             merchant_order_id=data.get("merchant_order_id", ""),
             transaction_time=datetime.fromisoformat(data["transaction_time"]) if isinstance(data.get("transaction_time"), str) else data.get("transaction_time", now),
             transaction_type=data.get("category", ""),
@@ -151,9 +160,9 @@ class SQLiteRepository(DataRepository):
             direction=data["direction"],
             amount=float(data["amount"]),
             payment_method=data.get("payment_method", ""),
-            status="手动录入",
+            status=data.get("status", "手动录入"),
             remark=data.get("remark", ""),
-            import_batch_id=None,
+            import_batch_id=data.get("import_batch_id"),
             created_at=now,
             updated_at=now,
             is_deleted=0,
@@ -190,7 +199,9 @@ class SQLiteRepository(DataRepository):
 
     def soft_delete_transaction(self, id: int) -> bool:
         tx = self._db.query(Transaction).filter(
-            Transaction.id == id, Transaction.is_deleted == 0
+            Transaction.id == id,
+            Transaction.user_id == self._user_id,
+            Transaction.is_deleted == 0,
         ).first()
         if not tx:
             return False
@@ -205,13 +216,14 @@ class SQLiteRepository(DataRepository):
         if not items:
             return 0, 0
 
-        # Count rows before to detect duplicates
-        before_count = self._db.query(func.count(Transaction.id)).scalar()
+        before_count = self._db.query(func.count(Transaction.id)).filter(
+            Transaction.user_id == self._user_id,
+        ).scalar()
 
-        # Build insert dicts, filtering out None source_order_id for unique constraint
         rows = []
         for item in items:
             row = {
+                "user_id": self._user_id,
                 "source": item["source"],
                 "source_order_id": item.get("source_order_id"),
                 "merchant_order_id": item.get("merchant_order_id"),
@@ -233,12 +245,13 @@ class SQLiteRepository(DataRepository):
             }
             rows.append(row)
 
-        # Use OR IGNORE for deduplication
         stmt = sqlite_insert(Transaction).prefix_with("OR IGNORE").values(rows)
         self._db.execute(stmt)
         self._db.commit()
 
-        after_count = self._db.query(func.count(Transaction.id)).scalar()
+        after_count = self._db.query(func.count(Transaction.id)).filter(
+            Transaction.user_id == self._user_id,
+        ).scalar()
         inserted = after_count - before_count
         duplicates = len(items) - inserted
         return inserted, duplicates
@@ -248,7 +261,10 @@ class SQLiteRepository(DataRepository):
     def get_summary_stats(
         self, start_date: Optional[str] = None, end_date: Optional[str] = None
     ) -> dict:
-        q = self._db.query(Transaction).filter(Transaction.is_deleted == 0)
+        q = self._db.query(Transaction).filter(
+            Transaction.is_deleted == 0,
+            Transaction.user_id == self._user_id,
+        )
         if start_date:
             q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
         if end_date:
@@ -283,6 +299,7 @@ class SQLiteRepository(DataRepository):
             )
             .filter(
                 Transaction.is_deleted == 0,
+                Transaction.user_id == self._user_id,
                 func.strftime("%Y", Transaction.transaction_time) == str(year),
                 Transaction.direction.in_(["income", "expense"]),
             )
@@ -319,7 +336,11 @@ class SQLiteRepository(DataRepository):
                 func.sum(Transaction.amount).label("total"),
                 func.count(Transaction.id).label("cnt"),
             )
-            .filter(Transaction.is_deleted == 0, Transaction.direction == direction)
+            .filter(
+                Transaction.is_deleted == 0,
+                Transaction.user_id == self._user_id,
+                Transaction.direction == direction,
+            )
         )
         if start_date:
             q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
@@ -350,6 +371,7 @@ class SQLiteRepository(DataRepository):
             )
             .filter(
                 Transaction.is_deleted == 0,
+                Transaction.user_id == self._user_id,
                 func.strftime("%Y-%m", Transaction.transaction_time) == month_str,
                 Transaction.direction.in_(["income", "expense"]),
             )
@@ -372,6 +394,7 @@ class SQLiteRepository(DataRepository):
     # ---------- Import Batches ----------
 
     def create_import_batch(self, data: dict) -> dict:
+        data["user_id"] = self._user_id
         batch = ImportBatch(**data)
         self._db.add(batch)
         self._db.commit()
@@ -379,7 +402,10 @@ class SQLiteRepository(DataRepository):
         return _batch_to_dict(batch)
 
     def update_import_batch(self, batch_id: str, data: dict) -> Optional[dict]:
-        batch = self._db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+        batch = self._db.query(ImportBatch).filter(
+            ImportBatch.id == batch_id,
+            ImportBatch.user_id == self._user_id,
+        ).first()
         if not batch:
             return None
         for k, v in data.items():
@@ -389,12 +415,16 @@ class SQLiteRepository(DataRepository):
         return _batch_to_dict(batch)
 
     def get_import_batch(self, batch_id: str) -> Optional[dict]:
-        batch = self._db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+        batch = self._db.query(ImportBatch).filter(
+            ImportBatch.id == batch_id,
+            ImportBatch.user_id == self._user_id,
+        ).first()
         return _batch_to_dict(batch) if batch else None
 
     def list_import_batches(self) -> list[dict]:
         batches = (
             self._db.query(ImportBatch)
+            .filter(ImportBatch.user_id == self._user_id)
             .order_by(ImportBatch.imported_at.desc())
             .all()
         )

@@ -3,7 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from autocoin.auth import get_current_user
 from autocoin.database import get_db
+from autocoin.models.user import User
 from autocoin.repository.sqlite import SQLiteRepository
 from autocoin.schemas.statistics import (
     CategoryResponse,
@@ -16,8 +18,11 @@ from autocoin.services.stats_service import StatsService
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
 
-def get_service(db: Session = Depends(get_db)) -> StatsService:
-    return StatsService(SQLiteRepository(db))
+def get_service(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StatsService:
+    return StatsService(SQLiteRepository(db, user.id))
 
 
 @router.get("/summary", response_model=SummaryResponse)

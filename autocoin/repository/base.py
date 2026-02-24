@@ -5,7 +5,7 @@ from typing import Any, Optional
 class DataRepository(ABC):
     """
     Abstract storage interface for all data operations.
-    Implementations can be swapped between SQLite (local) and remote API.
+    Implementations must be constructed with a user_id to scope all queries.
     """
 
     # ---------- Transactions ----------

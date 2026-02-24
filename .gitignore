@@ -34,3 +34,7 @@ Thumbs.db
 
 # Data files (user-specific bills)
 data/
+
+# Mosaic scripts
+analyze_img*.py
+mosaic_screenshots.py
