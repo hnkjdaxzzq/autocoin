@@ -41,3 +41,4 @@ testimg/
 # Mosaic scripts
 analyze_img*.py
 mosaic_screenshots.py
+cache_screenshots.py
