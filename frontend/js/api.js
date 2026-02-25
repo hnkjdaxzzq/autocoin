@@ -72,6 +72,54 @@ const API = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+    categories: () => apiFetch("/transactions/categories"),
+    batchDelete: (ids) =>
+      apiFetch("/transactions/batch/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      }),
+    batchUpdate: (ids, data) =>
+      apiFetch("/transactions/batch/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, ...data }),
+      }),
+    exportCsv: (params) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      );
+      const token = Auth.getToken();
+      // Use fetch to handle auth, then trigger download
+      return fetch(API_BASE + "/transactions/export/csv?" + qs, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      }).then(res => {
+        if (!res.ok) throw new Error("导出失败");
+        return res.blob();
+      }).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "autocoin_export.csv";
+        a.click(); URL.revokeObjectURL(url);
+      });
+    },
+    exportExcel: (params) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      );
+      const token = Auth.getToken();
+      return fetch(API_BASE + "/transactions/export/excel?" + qs, {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      }).then(res => {
+        if (!res.ok) throw new Error("导出失败");
+        return res.blob();
+      }).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "autocoin_export.xlsx";
+        a.click(); URL.revokeObjectURL(url);
+      });
+    },
   },
   imports: {
     upload: async (formData) => {
@@ -139,6 +187,12 @@ const API = {
     },
     confirmImageImport: (transactions) =>
       apiFetch("/imports/image/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions }),
+      }),
+    checkDuplicates: (transactions) =>
+      apiFetch("/imports/image/check-duplicates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transactions }),

@@ -57,3 +57,13 @@ class TransactionCreate(BaseModel):
     payment_method: Optional[str] = ""
     remark: Optional[str] = ""
     source: Optional[str] = "manual"    # default to "manual"
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+class BatchUpdateRequest(BaseModel):
+    ids: list[int]
+    category: Optional[str] = None
+    direction: Optional[str] = None

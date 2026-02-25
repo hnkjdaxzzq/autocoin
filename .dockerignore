@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.db
+*.db-wal
+*.db-shm
+.env
+.idea/
+.vscode/
+*.swp
+*.swo
+node_modules/

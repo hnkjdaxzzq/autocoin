@@ -1,0 +1,16 @@
+services:
+  autocoin:
+    build: .
+    container_name: autocoin
+    ports:
+      - "8000:8000"
+    volumes:
+      - autocoin_data:/data
+    environment:
+      - AUTOCOIN_JWT_SECRET=${AUTOCOIN_JWT_SECRET:-change-me-in-production}
+      - AUTOCOIN_DATABASE_URL=sqlite:////data/autocoin.db
+      - AUTOCOIN_CORS_ORIGINS=["*"]
+    restart: unless-stopped
+
+volumes:
+  autocoin_data:

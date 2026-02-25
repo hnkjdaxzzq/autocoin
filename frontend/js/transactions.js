@@ -6,6 +6,8 @@ const Transactions = {
     total: 0,
     total_pages: 1,
     filters: {},
+    selectedIds: new Set(),
+    categories: [],
   },
 
   render(container) {
@@ -15,7 +17,11 @@ const Transactions = {
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">账单明细</h1>
-        <button class="btn btn-primary" id="btn-toggle-form">+ 手动记账</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="btn-export-csv" title="导出CSV">📥 CSV</button>
+          <button class="btn btn-ghost" id="btn-export-excel" title="导出Excel">📥 Excel</button>
+          <button class="btn btn-primary" id="btn-toggle-form">+ 手动记账</button>
+        </div>
       </div>
 
       <!-- Manual entry form (hidden by default) -->
@@ -40,7 +46,8 @@ const Transactions = {
           </label>
           <label class="form-field">
             <span class="form-label">分类</span>
-            <input type="text" id="m-category" placeholder="如：餐饮美食、交通出行">
+            <input type="text" id="m-category" list="category-datalist" placeholder="如：餐饮美食、交通出行">
+            <datalist id="category-datalist"></datalist>
           </label>
           <label class="form-field">
             <span class="form-label">交易对方</span>
@@ -86,11 +93,23 @@ const Transactions = {
             <option value="alipay">支付宝</option>
             <option value="wechat">微信支付</option>
             <option value="manual">手动录入</option>
+            <option value="image">图片导入</option>
           </select>
         </label>
         <input type="text" id="f-search" placeholder="搜索对方/商品/备注…" style="min-width:180px">
         <button class="btn btn-primary" id="btn-search">搜索</button>
         <button class="btn btn-ghost" id="btn-reset">重置</button>
+      </div>
+
+      <!-- Batch action bar (hidden until selection) -->
+      <div class="batch-bar" id="batch-bar" style="display:none">
+        <span id="batch-count">已选 0 条</span>
+        <select id="batch-category" style="font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px">
+          <option value="">批量改分类…</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" id="btn-batch-category">应用分类</button>
+        <button class="btn btn-danger btn-sm" id="btn-batch-delete">批量删除</button>
+        <button class="btn btn-ghost btn-sm" id="btn-batch-clear">取消选择</button>
       </div>
 
       <div class="summary-grid" id="tx-summary"></div>
@@ -101,9 +120,78 @@ const Transactions = {
     `;
 
     Transactions._state.page = 1;
+    Transactions._state.selectedIds = new Set();
     Transactions._bindFilters(container);
     Transactions._bindManualForm(container);
+    Transactions._bindExport(container);
+    Transactions._bindBatch(container);
+    Transactions._loadCategories(container);
     Transactions._load(container);
+  },
+
+  async _loadCategories(container) {
+    try {
+      const res = await API.transactions.categories();
+      Transactions._state.categories = res.categories || [];
+      // Populate datalist and batch dropdown
+      const dl = container.querySelector("#category-datalist");
+      const batchSel = container.querySelector("#batch-category");
+      if (dl) {
+        dl.innerHTML = Transactions._state.categories.map(c => `<option value="${c}">`).join("");
+      }
+      if (batchSel) {
+        batchSel.innerHTML = '<option value="">批量改分类…</option>' +
+          Transactions._state.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+      }
+    } catch (_) {}
+  },
+
+  _bindExport(container) {
+    container.querySelector("#btn-export-csv").addEventListener("click", () => {
+      const filters = Transactions._getFilters(container);
+      API.transactions.exportCsv(filters).catch(e => alert("导出失败: " + e.message));
+    });
+    container.querySelector("#btn-export-excel").addEventListener("click", () => {
+      const filters = Transactions._getFilters(container);
+      API.transactions.exportExcel(filters).catch(e => alert("导出失败: " + e.message));
+    });
+  },
+
+  _bindBatch(container) {
+    container.querySelector("#btn-batch-delete").addEventListener("click", async () => {
+      const ids = Array.from(Transactions._state.selectedIds);
+      if (!ids.length) return;
+      if (!confirm(`确定删除选中的 ${ids.length} 条记录？`)) return;
+      try {
+        await API.transactions.batchDelete(ids);
+        Transactions._state.selectedIds.clear();
+        Transactions._load(container);
+      } catch (e) { alert("批量删除失败: " + e.message); }
+    });
+    container.querySelector("#btn-batch-category").addEventListener("click", async () => {
+      const ids = Array.from(Transactions._state.selectedIds);
+      const cat = container.querySelector("#batch-category").value;
+      if (!ids.length || !cat) { alert("请先选择记录和分类"); return; }
+      try {
+        await API.transactions.batchUpdate(ids, { category: cat });
+        Transactions._state.selectedIds.clear();
+        Transactions._load(container);
+      } catch (e) { alert("批量更新失败: " + e.message); }
+    });
+    container.querySelector("#btn-batch-clear").addEventListener("click", () => {
+      Transactions._state.selectedIds.clear();
+      Transactions._updateBatchBar(container);
+      container.querySelectorAll(".tx-row-check").forEach(c => c.checked = false);
+      const sa = container.querySelector("#tx-select-all");
+      if (sa) sa.checked = false;
+    });
+  },
+
+  _updateBatchBar(container) {
+    const bar = container.querySelector("#batch-bar");
+    const cnt = Transactions._state.selectedIds.size;
+    bar.style.display = cnt > 0 ? "flex" : "none";
+    container.querySelector("#batch-count").textContent = `已选 ${cnt} 条`;
   },
 
   _bindFilters(container) {
@@ -253,6 +341,7 @@ const Transactions = {
       <table>
         <thead>
           <tr>
+            <th style="width:40px"><input type="checkbox" id="tx-select-all" title="全选"></th>
             <th>时间</th>
             <th>来源</th>
             <th>分类</th>
@@ -267,8 +356,9 @@ const Transactions = {
         <tbody>
           ${data.items.map(tx => `
             <tr data-id="${tx.id}">
+              <td><input type="checkbox" class="tx-row-check" data-id="${tx.id}" ${Transactions._state.selectedIds.has(tx.id) ? "checked" : ""}></td>
               <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
-              <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : "手动"}</td>
+              <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : tx.source === "image" ? "图片" : "手动"}</td>
               <td>
                 <span class="editable category-cell" data-id="${tx.id}" title="点击编辑分类">
                   ${tx.category || tx.transaction_type || "—"}
@@ -298,6 +388,28 @@ const Transactions = {
       ${Transactions._renderPagination(data)}
     `;
 
+    // Bind select-all
+    const selectAll = wrap.querySelector("#tx-select-all");
+    selectAll.addEventListener("change", () => {
+      wrap.querySelectorAll(".tx-row-check").forEach(cb => {
+        cb.checked = selectAll.checked;
+        const id = parseInt(cb.dataset.id);
+        if (selectAll.checked) Transactions._state.selectedIds.add(id);
+        else Transactions._state.selectedIds.delete(id);
+      });
+      Transactions._updateBatchBar(container);
+    });
+
+    // Bind row checkboxes
+    wrap.querySelectorAll(".tx-row-check").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const id = parseInt(cb.dataset.id);
+        if (cb.checked) Transactions._state.selectedIds.add(id);
+        else Transactions._state.selectedIds.delete(id);
+        Transactions._updateBatchBar(container);
+      });
+    });
+
     // Bind category inline edit
     wrap.querySelectorAll(".category-cell").forEach(cell => {
       cell.addEventListener("click", () => Transactions._inlineEdit(cell, container));
@@ -326,6 +438,8 @@ const Transactions = {
         }
       });
     });
+
+    Transactions._updateBatchBar(container);
   },
 
   _renderPagination(data) {
@@ -350,7 +464,11 @@ const Transactions = {
     if (cell.querySelector("input")) return;
     const id = parseInt(cell.dataset.id);
     const current = cell.textContent.trim();
-    cell.innerHTML = `<input class="inline-input" value="${current}" />`;
+    const cats = Transactions._state.categories;
+    // Use input with datalist for dropdown + custom
+    const dlId = "cat-dl-" + id;
+    cell.innerHTML = `<input class="inline-input" list="${dlId}" value="${current === "—" ? "" : current}" />
+      <datalist id="${dlId}">${cats.map(c => `<option value="${c}">`).join("")}</datalist>`;
     const input = cell.querySelector("input");
     input.focus();
     input.select();

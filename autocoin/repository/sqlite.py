@@ -210,6 +210,22 @@ class SQLiteRepository(DataRepository):
         self._db.commit()
         return True
 
+    def list_categories(self) -> list[str]:
+        """Return distinct non-empty categories for this user."""
+        rows = (
+            self._db.query(Transaction.category)
+            .filter(
+                Transaction.user_id == self._user_id,
+                Transaction.is_deleted == 0,
+                Transaction.category != None,
+                Transaction.category != "",
+            )
+            .distinct()
+            .order_by(Transaction.category)
+            .all()
+        )
+        return [r[0] for r in rows]
+
     def bulk_insert_transactions(
         self, items: list[dict], batch_id: str
     ) -> tuple[int, int]:
@@ -429,6 +445,25 @@ class SQLiteRepository(DataRepository):
             .all()
         )
         return [_batch_to_dict(b) for b in batches]
+
+    def check_duplicates(self, items: list[dict]) -> list[bool]:
+        """Check which items already exist (same time + amount + counterparty)."""
+        results = []
+        for item in items:
+            tx_time = item.get("transaction_time")
+            if isinstance(tx_time, str):
+                tx_time = datetime.fromisoformat(tx_time)
+            q = self._db.query(Transaction.id).filter(
+                Transaction.user_id == self._user_id,
+                Transaction.is_deleted == 0,
+                Transaction.amount == float(item.get("amount", 0)),
+                Transaction.transaction_time == tx_time,
+            )
+            counterparty = item.get("counterparty", "")
+            if counterparty:
+                q = q.filter(Transaction.counterparty == counterparty)
+            results.append(q.first() is not None)
+        return results
 
     def count_today_image_imports(self) -> int:
         """Count image-source imported_rows for today (UTC) for this user."""

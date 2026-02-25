@@ -250,6 +250,22 @@ const Import = {
         </div>
       `;
 
+      // Check for duplicates
+      Import._dupFlags = [];
+      try {
+        const dupResult = await API.imports.checkDuplicates(Import._recognizedTransactions);
+        Import._dupFlags = dupResult.duplicates || [];
+        const dupCount = Import._dupFlags.filter(Boolean).length;
+        if (dupCount > 0) {
+          statusEl.innerHTML = `
+            <div class="img-recognize-success">
+              ✅ 从 ${response.image_count} 张图片中识别出 <strong>${Import._recognizedTransactions.length}</strong> 条交易记录
+              <span style="color:#f59e0b;font-size:13px;margin-left:8px">⚠️ ${dupCount} 条疑似重复（已标黄，确认时自动跳过）</span>
+            </div>
+          `;
+        }
+      } catch (_) { /* non-critical */ }
+
       Import._renderPreviewTable(container);
     } catch (err) {
       clearInterval(countdownTimer);
@@ -281,20 +297,24 @@ const Import = {
 
     if (isMobile) {
       // Card-based layout for mobile
+      const nonDupCount = txs.filter((_, i) => !(Import._dupFlags && Import._dupFlags[i])).length;
       resultsEl.innerHTML = `
         <div class="card img-preview-card">
           <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <span>识别结果预览</span>
             <div style="display:flex;gap:8px">
               <button class="btn btn-ghost" id="img-cancel-btn">取消</button>
-              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${txs.length})</button>
+              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${nonDupCount})</button>
             </div>
           </div>
           <div class="img-mobile-cards">
-            ${txs.map((t, i) => `
-              <div class="img-mobile-card" data-idx="${i}">
+            ${txs.map((t, i) => {
+              const isDup = Import._dupFlags && Import._dupFlags[i];
+              return `
+              <div class="img-mobile-card${isDup ? " img-dup-row" : ""}" data-idx="${i}">
                 <div class="img-mobile-card-header">
-                  <input type="checkbox" class="img-row-check" data-idx="${i}" checked>
+                  <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
+                  ${isDup ? '<span style="color:#f59e0b;font-size:11px;font-weight:600">重复</span>' : ""}
                   <span class="img-mobile-card-dir ${t.direction}">${directionLabel(t.direction)}</span>
                   <span class="img-mobile-card-amount ${t.direction}">¥${t.amount.toFixed(2)}</span>
                 </div>
@@ -339,13 +359,14 @@ const Import = {
       `;
     } else {
       // Table layout for desktop
+      const nonDupCount = txs.filter((_, i) => !(Import._dupFlags && Import._dupFlags[i])).length;
       resultsEl.innerHTML = `
         <div class="card img-preview-card">
           <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
             <span>识别结果预览</span>
             <div>
               <button class="btn btn-ghost" id="img-cancel-btn">取消</button>
-              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${txs.length})</button>
+              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${nonDupCount})</button>
             </div>
           </div>
           <div class="img-preview-table-wrap">
@@ -364,9 +385,14 @@ const Import = {
                 </tr>
               </thead>
               <tbody>
-                ${txs.map((t, i) => `
-                  <tr data-idx="${i}">
-                    <td><input type="checkbox" class="img-row-check" data-idx="${i}" checked></td>
+                ${txs.map((t, i) => {
+                  const isDup = Import._dupFlags && Import._dupFlags[i];
+                  return `
+                  <tr data-idx="${i}" class="${isDup ? "img-dup-row" : ""}">
+                    <td>
+                      <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
+                      ${isDup ? '<span style="color:#f59e0b;font-size:10px" title="数据库中已存在">重复</span>' : ""}
+                    </td>
                     <td><input type="text" class="img-cell-input" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}"></td>
                     <td><select class="img-cell-select" data-field="direction">${directionOptions(t.direction)}</select></td>
                     <td><input type="number" class="img-cell-input img-cell-amount" data-field="amount" value="${t.amount}" step="0.01" min="0"></td>
@@ -375,8 +401,8 @@ const Import = {
                     <td><input type="text" class="img-cell-input" data-field="product" value="${Import._escAttr(t.product)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="payment_method" value="${Import._escAttr(t.payment_method)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="remark" value="${Import._escAttr(t.remark)}"></td>
-                  </tr>
-                `).join("")}
+                  </tr>`;
+                }).join("")}
               </tbody>
             </table>
           </div>

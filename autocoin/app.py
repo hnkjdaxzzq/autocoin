@@ -5,9 +5,13 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+import logging
+
 from autocoin.config import settings
 from autocoin.database import init_db
 from autocoin.routers import transactions, imports, statistics, auth
+
+logger = logging.getLogger("autocoin")
 
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
@@ -62,6 +66,16 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def startup():
         init_db()
+        # Security warnings
+        if settings.jwt_secret == "autocoin-dev-secret-change-in-production":
+            logger.warning(
+                "\n" + "=" * 60
+                + "\n  WARNING: 使用默认 JWT 密钥，请设置环境变量"
+                + "\n  AUTOCOIN_JWT_SECRET=<你的随机密钥>"
+                + "\n" + "=" * 60
+            )
+        if "*" in settings.cors_origins:
+            logger.warning("CORS 允许所有来源 (*)，生产环境请设置具体域名")
 
     # IMPORTANT: Register API routes BEFORE static files mount
     # to prevent /api/v1/* from being served as static files

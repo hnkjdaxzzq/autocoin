@@ -143,6 +143,17 @@ async def recognize_images(
     )
 
 
+@router.post("/image/check-duplicates")
+async def check_image_duplicates(
+    transactions: list[ImageTransactionItem] = Body(..., embed=True),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    """Check which transactions already exist in DB."""
+    items = [t.model_dump() for t in transactions]
+    flags = repo.check_duplicates(items)
+    return {"duplicates": flags}
+
+
 @router.post("/image/confirm", response_model=ImportBatchResponse)
 async def confirm_image_import(
     transactions: list[ImageTransactionItem] = Body(..., embed=True),
@@ -154,6 +165,27 @@ async def confirm_image_import(
     if not transactions:
         raise HTTPException(status_code=400, detail="No transactions to import")
 
+    # De-duplicate: skip items that already exist in DB
+    items_dicts = [t.model_dump() for t in transactions]
+    dup_flags = repo.check_duplicates(items_dicts)
+    unique_transactions = [t for t, is_dup in zip(transactions, dup_flags) if not is_dup]
+    duplicate_count = sum(dup_flags)
+
+    if not unique_transactions:
+        # All duplicates — still create a batch record for visibility
+        batch_id = str(uuid.uuid4())
+        repo.create_import_batch({
+            "id": batch_id,
+            "filename": f"图片导入 ({len(transactions)} 条)",
+            "source": "image",
+            "status": "success",
+            "total_rows": len(transactions),
+            "imported_rows": 0,
+            "duplicate_rows": duplicate_count,
+            "error_rows": 0,
+        })
+        return repo.get_import_batch(batch_id)
+
     # Check daily quota again before actually importing
     daily_limit = _settings.image_import_daily_limit
     daily_used = repo.count_today_image_imports()
@@ -163,10 +195,10 @@ async def confirm_image_import(
             status_code=429,
             detail=f"今日图片导入已达上限（{daily_limit} 张），请明天再试",
         )
-    if len(transactions) > remaining:
+    if len(unique_transactions) > remaining:
         raise HTTPException(
             status_code=429,
-            detail=f"今日剩余配额 {remaining} 条，但您尝试导入 {len(transactions)} 条",
+            detail=f"今日剩余配额 {remaining} 条，但您尝试导入 {len(unique_transactions)} 条（去重后）",
         )
 
     batch_id = str(uuid.uuid4())
@@ -178,14 +210,14 @@ async def confirm_image_import(
             "status": "pending",
             "total_rows": len(transactions),
             "imported_rows": 0,
-            "duplicate_rows": 0,
+            "duplicate_rows": duplicate_count,
             "error_rows": 0,
         }
     )
 
     inserted = 0
     error_rows = 0
-    for t in transactions:
+    for t in unique_transactions:
         try:
             repo.create_transaction(
                 {
@@ -216,6 +248,7 @@ async def confirm_image_import(
         batch_id,
         {
             "imported_rows": inserted,
+            "duplicate_rows": duplicate_count,
             "error_rows": error_rows,
             "status": status,
         },

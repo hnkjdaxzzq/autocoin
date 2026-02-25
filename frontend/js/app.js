@@ -59,6 +59,24 @@ function logout() {
   window.location.hash = "#/login";
 }
 
+/* ===== Dark mode ===== */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute("data-theme") === "dark";
+  const next = isDark ? "light" : "dark";
+  html.setAttribute("data-theme", next);
+  localStorage.setItem("autocoin_theme", next);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("autocoin_theme");
+  if (saved === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else if (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+}
+
 /* ===== Mobile "我的" popup ===== */
 function initMePopup() {
   const btn = document.getElementById("bottom-bar-me");
@@ -72,6 +90,7 @@ function initMePopup() {
     popup.className = "me-popup";
     popup.innerHTML = `
       <div class="me-popup-user" id="me-popup-username"></div>
+      <button class="me-popup-action" onclick="toggleTheme()">🌓 切换主题</button>
       <button class="me-popup-logout" onclick="logout()">退出登录</button>
     `;
     document.body.appendChild(popup);
@@ -94,6 +113,7 @@ function initMePopup() {
 
 window.addEventListener("hashchange", navigate);
 window.addEventListener("load", async () => {
+  initTheme();
   initMePopup();
   // Validate stored token on app start
   if (Auth.isLoggedIn()) {
