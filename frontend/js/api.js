@@ -23,7 +23,7 @@ async function apiFetch(path, options = {}) {
 
   const res = await fetch(API_BASE + path, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !path.startsWith("/auth/")) {
     Auth.clear();
     window.location.hash = "#/login";
     throw new Error("请先登录");
