@@ -20,11 +20,13 @@ const AuthPage = {
     container.innerHTML = `
       <div class="auth-container">
         <div style="text-align:center;margin-bottom:32px">
-          <div style="font-size:36px;margin-bottom:8px">💰</div>
-          <h1 style="font-size:22px;font-weight:700">Autocoin</h1>
-          <p style="color:var(--text-muted);font-size:14px;margin-top:4px">个人记账应用</p>
+          <div style="margin-bottom:12px">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 000 4h4a2 2 0 010 4H8"/><path d="M12 6v2m0 8v2"/></svg>
+          </div>
+          <h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em">Autocoin</h1>
+          <p style="color:var(--text-muted);font-size:14px;margin-top:6px">个人记账 · 智能管理</p>
         </div>
-        <div class="card" style="padding:28px">
+        <div class="card" style="padding:28px 32px">
           <div class="auth-tabs">
             <button class="auth-tab active" data-tab="login">登录</button>
             <button class="auth-tab" data-tab="register">注册</button>

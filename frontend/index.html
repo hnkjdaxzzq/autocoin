@@ -4,30 +4,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Autocoin · 个人记账</title>
-  <link rel="stylesheet" href="/css/styles.css?v=6">
+  <link rel="stylesheet" href="/css/styles.css?v=7">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div id="layout">
     <nav id="sidebar">
-      <div class="logo">💰 Autocoin</div>
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 000 4h4a2 2 0 010 4H8"/><path d="M12 6v2m0 8v2"/></svg>
+        Autocoin
+      </div>
       <a href="#/dashboard" data-route="/dashboard">
-        <span class="icon">📊</span> 概览
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        概览
       </a>
       <a href="#/transactions" data-route="/transactions">
-        <span class="icon">📋</span> 账单
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        账单
       </a>
       <a href="#/import" data-route="/import">
-        <span class="icon">📥</span> 导入
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导入
       </a>
       <a href="#/stats" data-route="/stats">
-        <span class="icon">📈</span> 统计
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        统计
       </a>
       <div class="sidebar-spacer"></div>
       <div class="sidebar-user">
         <span id="user-display"></span>
-        <button onclick="toggleTheme()" class="btn-theme" title="切换主题">🌓</button>
-        <button onclick="logout()" class="btn-logout" title="退出登录">退出</button>
+        <button onclick="toggleTheme()" class="btn-theme" title="切换主题">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+        <button onclick="logout()" class="btn-logout" title="退出登录">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </div>
     </nav>
     <main id="app">
@@ -75,13 +86,13 @@
     </a>
   </nav>
 
-  <script src="/js/api.js?v=6"></script>
-  <script src="/js/charts.js?v=6"></script>
-  <script src="/js/auth.js?v=6"></script>
-  <script src="/js/dashboard.js?v=6"></script>
-  <script src="/js/transactions.js?v=6"></script>
-  <script src="/js/import.js?v=6"></script>
-  <script src="/js/stats.js?v=6"></script>
-  <script src="/js/app.js?v=6"></script>
+  <script src="/js/api.js?v=7"></script>
+  <script src="/js/charts.js?v=7"></script>
+  <script src="/js/auth.js?v=7"></script>
+  <script src="/js/dashboard.js?v=7"></script>
+  <script src="/js/transactions.js?v=7"></script>
+  <script src="/js/import.js?v=7"></script>
+  <script src="/js/stats.js?v=7"></script>
+  <script src="/js/app.js?v=7"></script>
 </body>
 </html>

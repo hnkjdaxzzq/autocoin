@@ -81,24 +81,24 @@ const Dashboard = {
       <div class="summary-card">
         <div class="label">总收入</div>
         <div class="value income">${fmtMoney(data.total_income)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${data.income_count} 笔</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${data.income_count} 笔交易</div>
       </div>
       <div class="summary-card">
         <div class="label">总支出</div>
         <div class="value expense">${fmtMoney(data.total_expense)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${data.expense_count} 笔</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${data.expense_count} 笔交易</div>
       </div>
       <div class="summary-card">
         <div class="label">净结余</div>
         <div class="value net ${netClass}">${fmtMoney(data.net)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">共 ${data.transaction_count} 笔</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">共 ${data.transaction_count} 笔</div>
       </div>
       <div class="summary-card">
         <div class="label">日均支出</div>
         <div class="value" style="color:var(--primary)">
           ${data.expense_count > 0 ? fmtMoney(data.total_expense / 30) : "¥0.00"}
         </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">估算（按30天）</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">估算（按30天）</div>
       </div>
     `;
   },

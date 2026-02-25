@@ -17,10 +17,28 @@ const Transactions = {
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">账单明细</h1>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" id="btn-export-csv" title="导出CSV">📥 CSV</button>
-          <button class="btn btn-ghost" id="btn-export-excel" title="导出Excel">📥 Excel</button>
-          <button class="btn btn-primary" id="btn-toggle-form">+ 手动记账</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div class="export-dropdown" id="export-dropdown">
+            <button class="export-dropdown-btn" id="btn-export-toggle" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              导出
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:12px;height:12px"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="export-dropdown-menu" id="export-menu">
+              <button type="button" id="btn-export-csv">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                导出为 CSV
+              </button>
+              <button type="button" id="btn-export-excel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                导出为 Excel
+              </button>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-toggle-form">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:15px;height:15px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            手动记账
+          </button>
         </div>
       </div>
 
@@ -147,11 +165,23 @@ const Transactions = {
   },
 
   _bindExport(container) {
+    // Dropdown toggle
+    const toggleBtn = container.querySelector("#btn-export-toggle");
+    const menu = container.querySelector("#export-menu");
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.classList.toggle("show");
+    });
+    document.addEventListener("click", () => menu.classList.remove("show"));
+    menu.addEventListener("click", (e) => e.stopPropagation());
+
     container.querySelector("#btn-export-csv").addEventListener("click", () => {
+      menu.classList.remove("show");
       const filters = Transactions._getFilters(container);
       API.transactions.exportCsv(filters).catch(e => alert("导出失败: " + e.message));
     });
     container.querySelector("#btn-export-excel").addEventListener("click", () => {
+      menu.classList.remove("show");
       const filters = Transactions._getFilters(container);
       API.transactions.exportExcel(filters).catch(e => alert("导出失败: " + e.message));
     });

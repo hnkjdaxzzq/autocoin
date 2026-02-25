@@ -10,14 +10,23 @@ const Import = {
 
       <!-- Tab switcher -->
       <div class="import-tabs">
-        <button class="import-tab active" data-tab="file">📂 文件导入</button>
-        <button class="import-tab" data-tab="image">📷 图片导入</button>
+        <button class="import-tab active" data-tab="file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:15px;height:15px"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          文件导入
+        </button>
+        <button class="import-tab" data-tab="image">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:15px;height:15px"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          图片导入
+        </button>
       </div>
 
       <!-- File import panel -->
       <div id="tab-file" class="import-tab-panel active">
         <div id="drop-zone" class="drop-zone">
-          <div class="drop-hint">📂 拖拽账单文件到此处</div>
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width:40px;height:40px;color:var(--primary)"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="drop-hint">拖拽账单文件到此处</div>
           <div class="drop-sub">支持支付宝 .csv 和微信支付 .xlsx 格式</div>
           <div style="margin-top:16px">
             <label class="btn btn-ghost" for="file-input" style="cursor:pointer">选择文件</label>
@@ -31,11 +40,17 @@ const Import = {
       <div id="tab-image" class="import-tab-panel">
         <div id="img-quota-bar" class="img-quota-bar" style="display:none"></div>
         <div id="img-drop-zone" class="drop-zone">
-          <div class="drop-hint">📷 拖拽图片到此处</div>
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width:40px;height:40px;color:var(--primary)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div class="drop-hint">拖拽图片到此处</div>
           <div class="drop-sub">支持 JPG / PNG / WebP，单次最多 10 张</div>
           <div class="img-upload-btns">
             <label class="btn btn-ghost" for="img-file-input" style="cursor:pointer">选择图片</label>
-            <label class="btn btn-ghost img-camera-label" for="img-camera-input" style="cursor:pointer">📷 拍照</label>
+            <label class="btn btn-ghost img-camera-label" for="img-camera-input" style="cursor:pointer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:15px;height:15px"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              拍照
+            </label>
             <input type="file" id="img-file-input" accept="image/*" style="display:none" multiple>
             <input type="file" id="img-camera-input" accept="image/*" capture="environment" style="display:none">
           </div>
@@ -353,7 +368,7 @@ const Import = {
                   </div>
                 </div>
               </div>
-            `).join("")}
+            `}).join("")}
           </div>
         </div>
       `;
