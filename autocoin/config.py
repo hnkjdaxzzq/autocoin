@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com"
 
-    # Daily image import limit per user (number of images successfully imported)
+    # Daily image recognition limit per user (number of images sent for recognition)
     image_import_daily_limit: int = 10
 
     class Config:

@@ -236,7 +236,7 @@ uv run python migrate_add_user.py
 | `AUTOCOIN_QWEN_MODEL` | 千问模型 | `qwen-vl-max` |
 | `AUTOCOIN_DEEPSEEK_API_KEY` | DeepSeek API Key | — |
 | `AUTOCOIN_DEEPSEEK_MODEL` | DeepSeek 模型 | `deepseek-chat` |
-| `AUTOCOIN_IMAGE_IMPORT_DAILY_LIMIT` | 每账号每天图片导入上限 | `10` |
+| `AUTOCOIN_IMAGE_IMPORT_DAILY_LIMIT` | 每账号每天图片识别上限 | `10` |
 
 > **图片识别说明**：只需配置至少一个 LLM 提供商的 API Key 即可使用图片导入功能。系统会按 `LLM_PROVIDER_ORDER` 指定的顺序依次尝试已配置的提供商，直到识别成功或全部失败。国外 API（OpenAI、Gemini）会自动读取环境变量中的代理设置（`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）。
 
@@ -275,7 +275,7 @@ uv run python migrate_add_user.py
 | `POST` | `/imports/image/recognize` | 上传图片，LLM 识别交易信息 |
 | `POST` | `/imports/image/confirm` | 确认并导入识别结果（自动去重） |
 | `POST` | `/imports/image/check-duplicates` | 检测重复交易 |
-| `GET` | `/imports/image/quota` | 查询今日图片导入额度 |
+| `GET` | `/imports/image/quota` | 查询今日图片识别额度 |
 | `GET` | `/imports` | 查看导入历史 |
 | `GET` | `/imports/{id}` | 查看单次导入详情 |
 

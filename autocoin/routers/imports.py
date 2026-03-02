@@ -78,10 +78,10 @@ MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20 MB per image
 
 @router.get("/image/quota")
 def get_image_quota(repo: SQLiteRepository = Depends(get_repo)):
-    """Return today's image import usage and limit."""
+    """Return today's image recognition usage and limit."""
     from autocoin.config import settings as _settings
     daily_limit = _settings.image_import_daily_limit
-    daily_used = repo.count_today_image_imports()
+    daily_used = repo.count_today_image_recognitions()
     return {"daily_used": daily_used, "daily_limit": daily_limit, "remaining": max(0, daily_limit - daily_used)}
 
 
@@ -99,13 +99,14 @@ async def recognize_images(
     if len(files) > 10:
         raise HTTPException(status_code=400, detail="最多同时上传 10 张图片")
 
-    # Check daily image import quota
+    # Check daily image recognition quota
     daily_limit = _settings.image_import_daily_limit
-    daily_used = repo.count_today_image_imports()
-    if daily_used >= daily_limit:
+    daily_used = repo.count_today_image_recognitions()
+    if daily_used + len(files) > daily_limit:
+        remaining = max(0, daily_limit - daily_used)
         raise HTTPException(
             status_code=429,
-            detail=f"今日图片导入已达上限（{daily_limit} 张），请明天再试",
+            detail=f"今日图片识别额度不足（剩余 {remaining} 张，本次 {len(files)} 张），请明天再试",
         )
 
     images: list[tuple[bytes, str]] = []
@@ -135,6 +136,20 @@ async def recognize_images(
             detail=f"图片识别失败: {str(e)}",
         )
 
+    # Record recognition usage (counts toward daily quota)
+    recognize_batch_id = str(uuid.uuid4())
+    repo.create_import_batch({
+        "id": recognize_batch_id,
+        "filename": f"图片识别 ({len(images)} 张)",
+        "source": "image_recognize",
+        "status": "success",
+        "total_rows": len(images),
+        "imported_rows": 0,
+        "duplicate_rows": 0,
+        "error_rows": 0,
+    })
+    daily_used += len(images)
+
     return ImageRecognizeResponse(
         transactions=[ImageTransactionItem(**t) for t in transactions],
         image_count=len(images),
@@ -160,7 +175,6 @@ async def confirm_image_import(
     repo: SQLiteRepository = Depends(get_repo),
 ):
     """Confirm and import recognized transactions from images."""
-    from autocoin.config import settings as _settings
 
     if not transactions:
         raise HTTPException(status_code=400, detail="No transactions to import")
@@ -185,21 +199,6 @@ async def confirm_image_import(
             "error_rows": 0,
         })
         return repo.get_import_batch(batch_id)
-
-    # Check daily quota again before actually importing
-    daily_limit = _settings.image_import_daily_limit
-    daily_used = repo.count_today_image_imports()
-    remaining = max(0, daily_limit - daily_used)
-    if remaining <= 0:
-        raise HTTPException(
-            status_code=429,
-            detail=f"今日图片导入已达上限（{daily_limit} 张），请明天再试",
-        )
-    if len(unique_transactions) > remaining:
-        raise HTTPException(
-            status_code=429,
-            detail=f"今日剩余配额 {remaining} 条，但您尝试导入 {len(unique_transactions)} 条（去重后）",
-        )
 
     batch_id = str(uuid.uuid4())
     repo.create_import_batch(

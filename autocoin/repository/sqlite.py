@@ -440,7 +440,10 @@ class SQLiteRepository(DataRepository):
     def list_import_batches(self) -> list[dict]:
         batches = (
             self._db.query(ImportBatch)
-            .filter(ImportBatch.user_id == self._user_id)
+            .filter(
+                ImportBatch.user_id == self._user_id,
+                ImportBatch.source != "image_recognize",
+            )
             .order_by(ImportBatch.imported_at.desc())
             .all()
         )
@@ -473,6 +476,24 @@ class SQLiteRepository(DataRepository):
             .filter(
                 ImportBatch.user_id == self._user_id,
                 ImportBatch.source == "image",
+                ImportBatch.imported_at >= today_start,
+            )
+            .scalar()
+        )
+        return int(result)
+
+    def count_today_image_recognitions(self) -> int:
+        """Count images recognized today (UTC) for this user.
+
+        Counts total_rows from batches with source='image_recognize'.
+        Each such batch records how many images were sent in one recognition call.
+        """
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = (
+            self._db.query(func.coalesce(func.sum(ImportBatch.total_rows), 0))
+            .filter(
+                ImportBatch.user_id == self._user_id,
+                ImportBatch.source == "image_recognize",
                 ImportBatch.imported_at >= today_start,
             )
             .scalar()

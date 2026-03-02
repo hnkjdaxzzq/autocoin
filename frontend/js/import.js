@@ -191,10 +191,10 @@ const Import = {
       bar.style.display = "";
       if (remaining <= 0) {
         bar.className = "img-quota-bar img-quota-bar--exhausted";
-        bar.innerHTML = `⚠️ 今日图片导入额度已用完（${q.daily_used}/${q.daily_limit}），请明天再试`;
+        bar.innerHTML = `⚠️ 今日图片识别额度已用完（${q.daily_used}/${q.daily_limit}），请明天再试`;
       } else {
         bar.className = "img-quota-bar";
-        bar.innerHTML = `今日图片导入额度：已用 <strong>${q.daily_used}</strong> / ${q.daily_limit} 张，剩余 <strong>${remaining}</strong> 张`;
+        bar.innerHTML = `今日图片识别额度：已用 <strong>${q.daily_used}</strong> / ${q.daily_limit} 张，剩余 <strong>${remaining}</strong> 张`;
       }
     } catch (_) { bar.style.display = "none"; }
   },
@@ -218,7 +218,7 @@ const Import = {
 
     // Show loading with countdown
     const statusEl = container.querySelector("#img-recognize-status");
-    const TIMEOUT_SEC = 90;
+    const TIMEOUT_SEC = 30;
     let countdown = TIMEOUT_SEC;
     statusEl.innerHTML = `
       <div class="img-recognize-loading">
