@@ -183,6 +183,19 @@ async def confirm_image_import(
     if not transactions:
         raise HTTPException(status_code=400, detail="No transactions to import")
 
+    # Validate all transactions
+    validation_errors = []
+    for i, t in enumerate(transactions, 1):
+        if not t.transaction_time:
+            validation_errors.append(f"第 {i} 条: 缺少交易时间")
+        if t.amount <= 0:
+            validation_errors.append(f"第 {i} 条: 金额必须大于 0")
+    if validation_errors:
+        raise HTTPException(
+            status_code=422,
+            detail="\n".join(validation_errors[:10]),
+        )
+
     # Build display filename from original image names
     if filenames:
         display_name = ", ".join(filenames)

@@ -330,7 +330,7 @@ const Import = {
               <div class="img-mobile-card${isDup ? " img-dup-row" : ""}" data-idx="${i}">
                 <div class="img-mobile-card-header">
                   <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
-                  ${isDup ? '<span style="color:#f59e0b;font-size:11px;font-weight:600">重复</span>' : ""}
+                  ${isDup ? '<span class="img-dup-badge">重复</span>' : ""}
                   <span class="img-mobile-card-dir ${t.direction}">${directionLabel(t.direction)}</span>
                   <span class="img-mobile-card-amount ${t.direction}">¥${t.amount.toFixed(2)}</span>
                 </div>
@@ -390,7 +390,7 @@ const Import = {
               <thead>
                 <tr>
                   <th style="width:40px"></th>
-                  <th>时间</th>
+                  <th style="min-width:155px">时间</th>
                   <th>类型</th>
                   <th>金额</th>
                   <th>分类</th>
@@ -405,11 +405,11 @@ const Import = {
                   const isDup = Import._dupFlags && Import._dupFlags[i];
                   return `
                   <tr data-idx="${i}" class="${isDup ? "img-dup-row" : ""}">
-                    <td>
+                    <td style="white-space:nowrap">
                       <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
-                      ${isDup ? '<span style="color:#f59e0b;font-size:10px" title="数据库中已存在">重复</span>' : ""}
+                      ${isDup ? '<span class="img-dup-badge" title="数据库中已存在">重复</span>' : ""}
                     </td>
-                    <td><input type="text" class="img-cell-input" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}"></td>
+                    <td><input type="text" class="img-cell-input img-cell-time" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}" placeholder="YYYY-MM-DD HH:MM:SS"></td>
                     <td><select class="img-cell-select" data-field="direction">${directionOptions(t.direction)}</select></td>
                     <td><input type="number" class="img-cell-input img-cell-amount" data-field="amount" value="${t.amount}" step="0.01" min="0"></td>
                     <td><input type="text" class="img-cell-input" data-field="category" value="${Import._escAttr(t.category)}"></td>
@@ -446,6 +446,16 @@ const Import = {
       container.querySelector("#img-preview-list").innerHTML = "";
     });
 
+    // Update confirm button count when checkboxes change
+    const updateConfirmCount = () => {
+      const checked = resultsEl.querySelectorAll(".img-row-check:checked").length;
+      const btn = resultsEl.querySelector("#img-confirm-btn");
+      if (btn) btn.textContent = `确认导入 (${checked})`;
+    };
+    resultsEl.querySelectorAll(".img-row-check").forEach(cb => {
+      cb.addEventListener("change", updateConfirmCount);
+    });
+
     // Confirm button
     resultsEl.querySelector("#img-confirm-btn").addEventListener("click", () => {
       Import._confirmImageImport(container);
@@ -465,6 +475,40 @@ const Import = {
     const txsToImport = Import._recognizedTransactions.filter((_, i) => checkedIdxs.has(i));
     if (!txsToImport.length) {
       alert("请至少选择一条记录");
+      return;
+    }
+
+    // Validate fields before submitting
+    const errors = [];
+    const timeRe = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/;
+    txsToImport.forEach((t, i) => {
+      const idx = i + 1;
+      if (!t.transaction_time || !timeRe.test(t.transaction_time.trim())) {
+        errors.push(`第 ${idx} 条：时间格式无效，请使用 YYYY-MM-DD HH:MM:SS`);
+      } else {
+        const d = new Date(t.transaction_time.replace(" ", "T"));
+        if (isNaN(d.getTime())) errors.push(`第 ${idx} 条：时间日期无效`);
+      }
+      if (!t.amount || t.amount <= 0) errors.push(`第 ${idx} 条：金额必须大于 0`);
+      if (!["expense", "income", "neutral"].includes(t.direction)) errors.push(`第 ${idx} 条：类型无效`);
+    });
+    if (errors.length) {
+      // Highlight error fields in UI
+      resultsEl.querySelectorAll(".img-cell-input").forEach(el => el.classList.remove("input-error"));
+      checkedIdxs.forEach(idx => {
+        const t = Import._recognizedTransactions[idx];
+        const row = resultsEl.querySelector(`[data-idx="${idx}"]`);
+        if (!row) return;
+        if (!t.transaction_time || !timeRe.test(t.transaction_time.trim()) || isNaN(new Date(t.transaction_time.replace(" ", "T")).getTime())) {
+          const el = row.querySelector('[data-field="transaction_time"]');
+          if (el) el.classList.add("input-error");
+        }
+        if (!t.amount || t.amount <= 0) {
+          const el = row.querySelector('[data-field="amount"]');
+          if (el) el.classList.add("input-error");
+        }
+      });
+      alert("请修正以下问题：\n" + errors.slice(0, 5).join("\n") + (errors.length > 5 ? `\n…等共 ${errors.length} 个错误` : ""));
       return;
     }
 

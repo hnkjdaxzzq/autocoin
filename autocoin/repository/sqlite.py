@@ -455,7 +455,11 @@ class SQLiteRepository(DataRepository):
         for item in items:
             tx_time = item.get("transaction_time")
             if isinstance(tx_time, str):
-                tx_time = datetime.fromisoformat(tx_time)
+                try:
+                    tx_time = datetime.fromisoformat(tx_time.replace(" ", "T"))
+                except (ValueError, TypeError):
+                    results.append(False)
+                    continue
             q = self._db.query(Transaction.id).filter(
                 Transaction.user_id == self._user_id,
                 Transaction.is_deleted == 0,
