@@ -31,5 +31,6 @@ class ImageRecognizeResponse(BaseModel):
     """Response from image recognition endpoint."""
     transactions: list[ImageTransactionItem] = []
     image_count: int = 0
+    filenames: list[str] = []
     daily_used: Optional[int] = None
     daily_limit: Optional[int] = None

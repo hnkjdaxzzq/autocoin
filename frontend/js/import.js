@@ -246,6 +246,7 @@ const Import = {
       const response = await API.imports.recognizeImages(formData, { timeoutMs: TIMEOUT_SEC * 1000 });
       clearInterval(countdownTimer);
       Import._recognizedTransactions = response.transactions || [];
+      Import._imageFilenames = response.filenames || [];
 
       if (Import._recognizedTransactions.length === 0) {
         statusEl.innerHTML = `<div class="img-recognize-empty">未能从图片中识别出交易记录，请检查图片内容</div>`;
@@ -473,7 +474,7 @@ const Import = {
     btn.textContent = "导入中…";
 
     try {
-      const result = await API.imports.confirmImageImport(txsToImport);
+      const result = await API.imports.confirmImageImport(txsToImport, Import._imageFilenames || []);
       const statusColor = result.status === "success" ? "#22c55e" : result.status === "failed" ? "#ef4444" : "#f59e0b";
 
       resultsEl.innerHTML = `

@@ -185,11 +185,11 @@ const API = {
       }
       return res.json();
     },
-    confirmImageImport: (transactions) =>
+    confirmImageImport: (transactions, filenames) =>
       apiFetch("/imports/image/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactions }),
+        body: JSON.stringify({ transactions, filenames }),
       }),
     checkDuplicates: (transactions) =>
       apiFetch("/imports/image/check-duplicates", {

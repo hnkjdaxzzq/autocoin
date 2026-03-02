@@ -110,6 +110,7 @@ async def recognize_images(
         )
 
     images: list[tuple[bytes, str]] = []
+    filenames: list[str] = []
     for f in files:
         content_type = f.content_type or "image/jpeg"
         if content_type not in ALLOWED_IMAGE_TYPES:
@@ -124,6 +125,7 @@ async def recognize_images(
                 detail=f"图片文件过大: {f.filename} (最大 20MB)",
             )
         images.append((data, content_type))
+        filenames.append(f.filename or "image")
 
     try:
         transactions = await recognize_with_fallback(images)
@@ -153,6 +155,7 @@ async def recognize_images(
     return ImageRecognizeResponse(
         transactions=[ImageTransactionItem(**t) for t in transactions],
         image_count=len(images),
+        filenames=filenames,
         daily_used=daily_used,
         daily_limit=daily_limit,
     )
@@ -171,13 +174,22 @@ async def check_image_duplicates(
 
 @router.post("/image/confirm", response_model=ImportBatchResponse)
 async def confirm_image_import(
-    transactions: list[ImageTransactionItem] = Body(..., embed=True),
+    transactions: list[ImageTransactionItem] = Body(...),
+    filenames: list[str] = Body(default=[]),
     repo: SQLiteRepository = Depends(get_repo),
 ):
     """Confirm and import recognized transactions from images."""
 
     if not transactions:
         raise HTTPException(status_code=400, detail="No transactions to import")
+
+    # Build display filename from original image names
+    if filenames:
+        display_name = ", ".join(filenames)
+        if len(display_name) > 200:
+            display_name = display_name[:197] + "..."
+    else:
+        display_name = f"图片导入 ({len(transactions)} 条)"
 
     # De-duplicate: skip items that already exist in DB
     items_dicts = [t.model_dump() for t in transactions]
@@ -190,7 +202,7 @@ async def confirm_image_import(
         batch_id = str(uuid.uuid4())
         repo.create_import_batch({
             "id": batch_id,
-            "filename": f"图片导入 ({len(transactions)} 条)",
+            "filename": display_name,
             "source": "image",
             "status": "success",
             "total_rows": len(transactions),
@@ -204,7 +216,7 @@ async def confirm_image_import(
     repo.create_import_batch(
         {
             "id": batch_id,
-            "filename": f"图片导入 ({len(transactions)} 条)",
+            "filename": display_name,
             "source": "image",
             "status": "pending",
             "total_rows": len(transactions),
