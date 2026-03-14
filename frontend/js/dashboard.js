@@ -142,7 +142,7 @@ const Dashboard = {
     el.innerHTML = `
       <table>
         <thead>
-          <tr><th>时间</th><th>对方</th><th>商品</th><th>方向</th><th style="text-align:right">金额</th><th>分类</th></tr>
+          <tr><th>时间</th><th>对方</th><th>商品</th><th>方向</th><th>金额</th><th>分类</th></tr>
         </thead>
         <tbody>
           ${items.map(tx => `
@@ -151,7 +151,7 @@ const Dashboard = {
               <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.counterparty || "—"}</td>
               <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.product || "—"}</td>
               <td>${directionBadge(tx.direction)}</td>
-              <td style="text-align:right;font-weight:600;color:${tx.direction === "income" ? "var(--income)" : tx.direction === "expense" ? "var(--expense)" : "inherit"}">
+              <td style="font-weight:600;color:${tx.direction === "income" ? "var(--income)" : tx.direction === "expense" ? "var(--expense)" : "inherit"}">
                 ${fmtMoney(tx.amount)}
               </td>
               <td>${tx.category || tx.transaction_type || "—"}</td>

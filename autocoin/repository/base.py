@@ -106,3 +106,21 @@ class DataRepository(ABC):
     @abstractmethod
     def list_import_batches(self) -> list[dict]:
         ...
+
+    # ---------- Classification Rules ----------
+
+    @abstractmethod
+    def list_classification_rules(self) -> list[dict]:
+        ...
+
+    @abstractmethod
+    def create_classification_rule(self, data: dict) -> dict:
+        ...
+
+    @abstractmethod
+    def update_classification_rule(self, rule_id: int, data: dict) -> Optional[dict]:
+        ...
+
+    @abstractmethod
+    def delete_classification_rule(self, rule_id: int) -> bool:
+        ...

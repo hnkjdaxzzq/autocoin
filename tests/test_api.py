@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from autocoin.app import create_app
+from tests.test_parsers import _make_alipay_csv
 
 
 @pytest.fixture(scope="module")
@@ -170,3 +171,103 @@ class TestTransactions:
     def test_unauthorized(self, client):
         resp = client.get("/api/v1/transactions")
         assert resp.status_code in (401, 403)  # No token → depends on FastAPI version
+
+
+class TestClassificationRules:
+    def test_rule_crud(self, client, auth_headers):
+        create_resp = client.post("/api/v1/rules", headers=auth_headers, json={
+            "name": "美团自动归类",
+            "priority": 10,
+            "is_active": True,
+            "match_counterparty": "美团",
+            "match_product": "外卖",
+            "match_payment_method": "",
+            "match_transaction_type": "",
+            "category": "餐饮美食",
+            "remark": "规则自动归类",
+        })
+        assert create_resp.status_code == 201
+        rule = create_resp.json()
+        assert rule["name"] == "美团自动归类"
+        assert rule["category"] == "餐饮美食"
+
+        list_resp = client.get("/api/v1/rules", headers=auth_headers)
+        assert list_resp.status_code == 200
+        assert any(item["id"] == rule["id"] for item in list_resp.json())
+
+        update_resp = client.put(f"/api/v1/rules/{rule['id']}", headers=auth_headers, json={
+            "name": "美团优先规则",
+            "priority": 5,
+            "is_active": True,
+            "match_counterparty": "美团",
+            "match_product": "",
+            "match_payment_method": "",
+            "match_transaction_type": "",
+            "category": "外卖",
+            "remark": "自动备注",
+        })
+        assert update_resp.status_code == 200
+        assert update_resp.json()["priority"] == 5
+        assert update_resp.json()["category"] == "外卖"
+
+        delete_resp = client.delete(f"/api/v1/rules/{rule['id']}", headers=auth_headers)
+        assert delete_resp.status_code == 200
+
+    def test_rule_applies_to_manual_transaction(self, client, auth_headers):
+        rule_resp = client.post("/api/v1/rules", headers=auth_headers, json={
+            "name": "滴滴归类交通",
+            "priority": 20,
+            "is_active": True,
+            "match_counterparty": "滴滴",
+            "match_product": "",
+            "match_payment_method": "",
+            "match_transaction_type": "",
+            "category": "交通出行",
+            "remark": "规则命中",
+        })
+        assert rule_resp.status_code == 201
+
+        tx_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-03-01 08:30:00",
+            "direction": "expense",
+            "amount": 18.5,
+            "category": "",
+            "counterparty": "滴滴出行",
+            "product": "快车",
+            "payment_method": "微信支付",
+            "remark": "",
+        })
+        assert tx_resp.status_code == 201
+        data = tx_resp.json()
+        assert data["category"] == "交通出行"
+        assert data["remark"] == "规则命中"
+
+    def test_rule_applies_to_file_import(self, client, auth_headers):
+        rule_resp = client.post("/api/v1/rules", headers=auth_headers, json={
+            "name": "星巴克归类咖啡",
+            "priority": 30,
+            "is_active": True,
+            "match_counterparty": "星巴克",
+            "match_product": "",
+            "match_payment_method": "",
+            "match_transaction_type": "",
+            "category": "咖啡饮品",
+            "remark": "",
+        })
+        assert rule_resp.status_code == 201
+
+        csv_bytes = _make_alipay_csv([
+            [
+                "2025-03-02 10:00:00", "", "星巴克", "sb@example.com",
+                "拿铁", "支出", "32.00", "支付宝", "交易成功",
+                "2025030210000001", "M100", "",
+            ],
+        ])
+        files = {"file": ("alipay.csv", csv_bytes, "text/csv")}
+        import_resp = client.post("/api/v1/imports", headers=auth_headers, files=files)
+        assert import_resp.status_code == 200
+
+        list_resp = client.get("/api/v1/transactions?search=%E6%98%9F%E5%B7%B4%E5%85%8B", headers=auth_headers)
+        assert list_resp.status_code == 200
+        items = list_resp.json()["items"]
+        assert any(item["category"] == "咖啡饮品" for item in items)
