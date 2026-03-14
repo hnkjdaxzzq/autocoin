@@ -146,6 +146,36 @@ const API = {
       }
       return res.json();
     },
+    preview: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(API_BASE + "/imports/preview", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    confirmFileImport: (filename, source, transactions) =>
+      apiFetch("/imports/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, source, transactions }),
+      }),
     list: () => apiFetch("/imports"),
     get: (id) => apiFetch(`/imports/${id}`),
     recognizeImages: async (formData, { timeoutMs = 90000 } = {}) => {
