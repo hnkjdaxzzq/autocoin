@@ -88,7 +88,9 @@ class FileTransactionItem(BaseModel):
 
     @validator("amount")
     def validate_import_amount(cls, v):
-        return ImageTransactionItem.validate_amount(v)
+        if v < 0:
+            raise ValueError("金额不能小于 0")
+        return round(v, 2)
 
 
 class FileImportPreviewResponse(BaseModel):

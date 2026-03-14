@@ -320,3 +320,20 @@ class TestFileImportPreview:
         data = confirm_resp.json()
         assert data["imported_rows"] == 1
         assert data["duplicate_rows"] == 0
+
+    def test_preview_allows_zero_amount_file_rows(self, client, auth_headers):
+        zero_csv = _make_alipay_csv([
+            [
+                "2025-03-22 08:00:00", "其他", "支付宝余额宝", "yb@example.com",
+                "利息结转", "不计收支", "0.00", "支付宝", "交易成功",
+                "2025032208000001", "M003", "",
+            ],
+        ])
+        preview_resp = client.post("/api/v1/imports/preview", headers=auth_headers, files={
+            "file": ("zero.csv", zero_csv, "text/csv"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["total_rows"] == 1
+        assert preview["items"][0]["amount"] == 0.0
+        assert preview["items"][0]["direction"] == "neutral"
