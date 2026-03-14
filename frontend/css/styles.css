@@ -660,6 +660,7 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 
 .cat-detail-wrap table {
   margin: 0;
+  table-layout: fixed;
 }
 
 .cat-detail-wrap th {

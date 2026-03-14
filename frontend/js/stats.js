@@ -328,7 +328,16 @@ const Stats = {
 
       const totalPages = data.total_pages;
       wrap.innerHTML = `
-        <table>
+        <table class="cat-detail-table">
+          <colgroup>
+            <col style="width: 150px">
+            <col style="width: 90px">
+            <col style="width: 140px">
+            <col style="width: 180px">
+            <col style="width: 100px">
+            <col style="width: 120px">
+            <col>
+          </colgroup>
           <thead>
             <tr>
               <th>时间</th>
@@ -344,12 +353,12 @@ const Stats = {
             ${data.items.map(tx => `
               <tr>
                 <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
-                <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : "手动"}</td>
+                <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : tx.source === "image" ? "图片" : "手动"}</td>
                 <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.counterparty || ""}">${tx.counterparty || "—"}</td>
                 <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.product || ""}">${tx.product || "—"}</td>
                 <td style="text-align:right;font-weight:600;color:${tx.direction === "income" ? "var(--income)" : "var(--expense)"}">${fmtMoney(tx.amount)}</td>
                 <td>${tx.payment_method || "—"}</td>
-                <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tx.remark || "—"}</td>
+                <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.remark || ""}">${tx.remark || "—"}</td>
               </tr>
             `).join("")}
           </tbody>

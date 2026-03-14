@@ -380,6 +380,7 @@ const Transactions = {
             <th>方向</th>
             <th style="text-align:right">金额</th>
             <th>支付方式</th>
+            <th>备注</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -407,6 +408,9 @@ const Transactions = {
               </td>
               <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 ${tx.payment_method || "—"}
+              </td>
+              <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.remark || ""}">
+                ${tx.remark || "—"}
               </td>
               <td>
                 <button class="btn btn-danger btn-sm btn-delete" data-id="${tx.id}"
