@@ -199,6 +199,22 @@ const API = {
       }),
     imageQuota: () => apiFetch("/imports/image/quota"),
   },
+  rules: {
+    list: () => apiFetch("/rules"),
+    create: (body) =>
+      apiFetch("/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    update: (id, body) =>
+      apiFetch(`/rules/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    delete: (id) => apiFetch(`/rules/${id}`, { method: "DELETE" }),
+  },
   stats: {
     summary: (params) =>
       apiFetch("/statistics/summary?" + new URLSearchParams(

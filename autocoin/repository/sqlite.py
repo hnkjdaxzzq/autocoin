@@ -5,6 +5,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from autocoin.models.classification_rule import ClassificationRule
 from autocoin.models.transaction import Transaction
 from autocoin.models.import_batch import ImportBatch
 from autocoin.repository.base import DataRepository
@@ -47,11 +48,71 @@ def _batch_to_dict(b: ImportBatch) -> dict:
     }
 
 
+def _rule_to_dict(rule: ClassificationRule) -> dict:
+    return {
+        "id": rule.id,
+        "name": rule.name,
+        "priority": rule.priority,
+        "is_active": rule.is_active,
+        "match_counterparty": rule.match_counterparty,
+        "match_product": rule.match_product,
+        "match_payment_method": rule.match_payment_method,
+        "match_transaction_type": rule.match_transaction_type,
+        "category": rule.category,
+        "remark": rule.remark,
+        "created_at": rule.created_at.isoformat() if rule.created_at else None,
+        "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
+    }
+
+
 class SQLiteRepository(DataRepository):
 
     def __init__(self, db: Session, user_id: int):
         self._db = db
         self._user_id = user_id
+
+    def _list_active_rules(self) -> list[ClassificationRule]:
+        return (
+            self._db.query(ClassificationRule)
+            .filter(
+                ClassificationRule.user_id == self._user_id,
+                ClassificationRule.is_active == True,
+            )
+            .order_by(ClassificationRule.priority.asc(), ClassificationRule.id.asc())
+            .all()
+        )
+
+    def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
+        def contains(value: str, expected: str) -> bool:
+            if not expected:
+                return True
+            return expected.lower() in (value or "").lower()
+
+        return all(
+            [
+                contains(item.get("counterparty", ""), rule.match_counterparty),
+                contains(item.get("product", ""), rule.match_product),
+                contains(item.get("payment_method", ""), rule.match_payment_method),
+                contains(item.get("transaction_type", ""), rule.match_transaction_type),
+            ]
+        )
+
+    def _apply_classification_rules(self, item: dict) -> dict:
+        normalized = dict(item)
+        for rule in self._list_active_rules():
+            if not self._matches_rule(normalized, rule):
+                continue
+            if rule.category and not normalized.get("category"):
+                normalized["category"] = rule.category
+            if rule.remark:
+                existing_remark = (normalized.get("remark") or "").strip()
+                normalized["remark"] = (
+                    existing_remark
+                    if existing_remark
+                    else rule.remark
+                )
+            break
+        return normalized
 
     # ---------- Transactions ----------
 
@@ -145,6 +206,7 @@ class SQLiteRepository(DataRepository):
         return _tx_to_dict(tx)
 
     def create_transaction(self, data: dict) -> dict:
+        data = self._apply_classification_rules(data)
         now = datetime.utcnow()
         tx = Transaction(
             user_id=self._user_id,
@@ -238,6 +300,7 @@ class SQLiteRepository(DataRepository):
 
         rows = []
         for item in items:
+            item = self._apply_classification_rules(item)
             row = {
                 "user_id": self._user_id,
                 "source": item["source"],
@@ -503,3 +566,65 @@ class SQLiteRepository(DataRepository):
             .scalar()
         )
         return int(result)
+
+    # ---------- Classification Rules ----------
+
+    def list_classification_rules(self) -> list[dict]:
+        rules = (
+            self._db.query(ClassificationRule)
+            .filter(ClassificationRule.user_id == self._user_id)
+            .order_by(ClassificationRule.priority.asc(), ClassificationRule.id.asc())
+            .all()
+        )
+        return [_rule_to_dict(rule) for rule in rules]
+
+    def create_classification_rule(self, data: dict) -> dict:
+        rule = ClassificationRule(
+            user_id=self._user_id,
+            name=data["name"],
+            priority=data.get("priority", 100),
+            is_active=data.get("is_active", True),
+            match_counterparty=data.get("match_counterparty", ""),
+            match_product=data.get("match_product", ""),
+            match_payment_method=data.get("match_payment_method", ""),
+            match_transaction_type=data.get("match_transaction_type", ""),
+            category=data.get("category", ""),
+            remark=data.get("remark", ""),
+        )
+        self._db.add(rule)
+        self._db.commit()
+        self._db.refresh(rule)
+        return _rule_to_dict(rule)
+
+    def update_classification_rule(self, rule_id: int, data: dict) -> Optional[dict]:
+        rule = (
+            self._db.query(ClassificationRule)
+            .filter(
+                ClassificationRule.id == rule_id,
+                ClassificationRule.user_id == self._user_id,
+            )
+            .first()
+        )
+        if not rule:
+            return None
+        for key, value in data.items():
+            setattr(rule, key, value)
+        rule.updated_at = datetime.utcnow()
+        self._db.commit()
+        self._db.refresh(rule)
+        return _rule_to_dict(rule)
+
+    def delete_classification_rule(self, rule_id: int) -> bool:
+        rule = (
+            self._db.query(ClassificationRule)
+            .filter(
+                ClassificationRule.id == rule_id,
+                ClassificationRule.user_id == self._user_id,
+            )
+            .first()
+        )
+        if not rule:
+            return False
+        self._db.delete(rule)
+        self._db.commit()
+        return True

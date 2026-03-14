@@ -23,7 +23,12 @@ Base = declarative_base()
 
 
 def init_db():
-    from autocoin.models import transaction, import_batch, user  # noqa: F401 - registers models
+    from autocoin.models import (  # noqa: F401 - registers models
+        classification_rule,
+        import_batch,
+        transaction,
+        user,
+    )
     Base.metadata.create_all(bind=engine)
 
 

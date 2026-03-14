@@ -4,6 +4,7 @@ const ROUTES = {
   "/dashboard":    Dashboard,
   "/transactions": Transactions,
   "/import":       Import,
+  "/rules":        RulesPage,
   "/stats":        Stats,
 };
 
@@ -90,6 +91,7 @@ function initMePopup() {
     popup.className = "me-popup";
     popup.innerHTML = `
       <div class="me-popup-user" id="me-popup-username"></div>
+      <button class="me-popup-action" onclick="window.location.hash='#/rules'">分类规则</button>
       <button class="me-popup-action" onclick="toggleTheme()">🌓 切换主题</button>
       <button class="me-popup-logout" onclick="logout()">退出登录</button>
     `;

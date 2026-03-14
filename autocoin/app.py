@@ -9,7 +9,7 @@ import logging
 
 from autocoin.config import settings
 from autocoin.database import init_db
-from autocoin.routers import transactions, imports, statistics, auth
+from autocoin.routers import auth, imports, rules, statistics, transactions
 
 logger = logging.getLogger("autocoin")
 
@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix=settings.api_prefix)
     app.include_router(transactions.router, prefix=settings.api_prefix)
     app.include_router(imports.router, prefix=settings.api_prefix)
+    app.include_router(rules.router, prefix=settings.api_prefix)
     app.include_router(statistics.router, prefix=settings.api_prefix)
 
     # Serve frontend SPA - must be last

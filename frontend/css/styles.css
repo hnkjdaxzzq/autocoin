@@ -1402,3 +1402,121 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   font-size: 12px !important;
   border-radius: 6px !important;
 }
+
+/* ===== Rules page ===== */
+.rules-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.rules-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.rules-tips p {
+  margin: 0;
+}
+.rules-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.rules-form-span2 {
+  grid-column: 1 / -1;
+}
+.rules-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rules-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.rules-error {
+  color: var(--expense);
+  font-size: 13px;
+  margin-top: 10px;
+  min-height: 18px;
+}
+.rule-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: var(--card-bg);
+}
+.rule-item + .rule-item {
+  margin-top: 12px;
+}
+.rule-item--inactive {
+  opacity: 0.65;
+}
+.rule-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.rule-item-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.rule-item-meta {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.rule-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rule-item-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.rule-item-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rule-item-grid span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.rule-item-grid strong {
+  font-size: 14px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+@media (max-width: 960px) {
+  .rules-layout {
+    grid-template-columns: 1fr;
+  }
+  .rule-item-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .rules-form {
+    grid-template-columns: 1fr;
+  }
+  .rule-item-head {
+    flex-direction: column;
+  }
+  .rule-item-grid {
+    grid-template-columns: 1fr;
+  }
+}
