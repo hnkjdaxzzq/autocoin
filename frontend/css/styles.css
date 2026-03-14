@@ -307,7 +307,7 @@ th {
   text-transform: uppercase;
   letter-spacing: .06em;
   padding: 12px 14px;
-  text-align: left;
+  text-align: center;
   border-bottom: 1px solid var(--border);
 }
 
@@ -316,6 +316,7 @@ td {
   border-bottom: 1px solid var(--border);
   font-size: 13px;
   vertical-align: middle;
+  text-align: center;
 }
 
 tr:last-child td { border-bottom: none; }
@@ -655,11 +656,14 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   background: var(--table-head-bg);
   border-top: 1px solid var(--border);
   padding: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .cat-detail-wrap table {
   margin: 0;
+  width: 100%;
+  min-width: 1080px;
   table-layout: fixed;
 }
 
@@ -673,6 +677,81 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   font-size: 12px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.cat-detail-grid {
+  min-width: 1080px;
+}
+
+.cat-detail-grid-head,
+.cat-detail-grid-row {
+  display: grid;
+  grid-template-columns: 170px 90px 190px 220px 120px 140px 150px;
+  align-items: center;
+}
+
+.cat-detail-grid-head {
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.cat-detail-grid-head > div,
+.cat-detail-grid-row > div {
+  padding: 8px 12px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.cat-detail-grid-row {
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cat-detail-grid-row:last-child {
+  border-bottom: none;
+}
+
+.cat-col-time {
+  width: 170px;
+}
+
+.cat-col-source {
+  width: 90px;
+}
+
+.cat-col-counterparty {
+  width: 190px;
+}
+
+.cat-col-product {
+  width: 220px;
+}
+
+.cat-col-amount {
+  width: 120px;
+}
+
+.cat-col-payment {
+  width: 140px;
+}
+
+.cat-col-remark {
+  width: 150px;
+}
+
+.cat-col-right {
+  text-align: center;
+}
+
+.cat-detail-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cat-detail-wrap .detail-pager {

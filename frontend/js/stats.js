@@ -167,29 +167,29 @@ const Stats = {
     el.innerHTML = `
       <table>
         <thead>
-          <tr><th>月份</th><th style="text-align:right">收入</th><th style="text-align:right">支出</th><th style="text-align:right">月结余</th><th style="text-align:right">累计结余</th><th style="text-align:right">笔数</th></tr>
+          <tr><th>月份</th><th>收入</th><th>支出</th><th>月结余</th><th>累计结余</th><th>笔数</th></tr>
         </thead>
         <tbody>
           ${activeMonths.map((m, i) => `
             <tr>
               <td>${m.month}月</td>
-              <td style="text-align:right;color:var(--income)">${fmtMoney(m.income)}</td>
-              <td style="text-align:right;color:var(--expense)">${fmtMoney(m.expense)}</td>
-              <td style="text-align:right;font-weight:600;color:${m.net >= 0 ? "var(--income)" : "var(--expense)"}">
+              <td style="color:var(--income)">${fmtMoney(m.income)}</td>
+              <td style="color:var(--expense)">${fmtMoney(m.expense)}</td>
+              <td style="font-weight:600;color:${m.net >= 0 ? "var(--income)" : "var(--expense)"}">
                 ${fmtMoney(m.net)}
               </td>
-              <td style="text-align:right;font-weight:600;color:${cumulativeData[i] >= 0 ? "var(--income)" : "var(--expense)"}">
+              <td style="font-weight:600;color:${cumulativeData[i] >= 0 ? "var(--income)" : "var(--expense)"}">
                 ${fmtMoney(cumulativeData[i])}
               </td>
-              <td style="text-align:right">${m.count}</td>
+              <td>${m.count}</td>
             </tr>`).join("")}
           <tr style="font-weight:700;border-top:2px solid var(--border)">
             <td>合计</td>
-            <td style="text-align:right;color:var(--income)">${fmtMoney(totalIncome)}</td>
-            <td style="text-align:right;color:var(--expense)">${fmtMoney(totalExpense)}</td>
-            <td style="text-align:right;color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
-            <td style="text-align:right;color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
-            <td style="text-align:right">${months.reduce((s, m) => s + m.count, 0)}</td>
+            <td style="color:var(--income)">${fmtMoney(totalIncome)}</td>
+            <td style="color:var(--expense)">${fmtMoney(totalExpense)}</td>
+            <td style="color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
+            <td style="color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
+            <td>${months.reduce((s, m) => s + m.count, 0)}</td>
           </tr>
         </tbody>
       </table>
@@ -249,9 +249,9 @@ const Stats = {
           <tr>
             <th style="width:24px"></th>
             <th>分类</th>
-            <th style="text-align:right">金额</th>
-            <th style="text-align:right">笔数</th>
-            <th style="text-align:right">占比</th>
+            <th>金额</th>
+            <th>笔数</th>
+            <th>占比</th>
           </tr>
         </thead>
         <tbody>
@@ -259,10 +259,10 @@ const Stats = {
             <tr class="cat-row" data-cat="${item.category || ""}" data-idx="${idx}">
               <td><span class="expand-icon">&#9654;</span></td>
               <td>${item.category || "其他"}</td>
-              <td style="text-align:right;font-weight:600">${fmtMoney(item.amount)}</td>
-              <td style="text-align:right">${item.count}</td>
-              <td style="text-align:right">
-                <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+              <td style="font-weight:600">${fmtMoney(item.amount)}</td>
+              <td>${item.count}</td>
+              <td>
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px">
                   <div style="background:var(--primary);height:6px;border-radius:3px;width:${Math.max(2, item.percentage)}px"></div>
                   ${item.percentage}%
                 </div>
@@ -277,9 +277,9 @@ const Stats = {
           <tr style="font-weight:700;border-top:2px solid var(--border)">
             <td></td>
             <td>合计</td>
-            <td style="text-align:right">${fmtMoney(data.total)}</td>
-            <td style="text-align:right">${data.items.reduce((s, i) => s + i.count, 0)}</td>
-            <td style="text-align:right">100%</td>
+            <td>${fmtMoney(data.total)}</td>
+            <td>${data.items.reduce((s, i) => s + i.count, 0)}</td>
+            <td>100%</td>
           </tr>
         </tbody>
       </table>
@@ -328,41 +328,30 @@ const Stats = {
 
       const totalPages = data.total_pages;
       wrap.innerHTML = `
-        <table class="cat-detail-table">
-          <colgroup>
-            <col style="width: 150px">
-            <col style="width: 90px">
-            <col style="width: 140px">
-            <col style="width: 180px">
-            <col style="width: 100px">
-            <col style="width: 120px">
-            <col>
-          </colgroup>
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>来源</th>
-              <th>交易对方</th>
-              <th>商品</th>
-              <th style="text-align:right">金额</th>
-              <th>支付方式</th>
-              <th>备注</th>
-            </tr>
-          </thead>
-          <tbody>
+        <div class="cat-detail-grid">
+          <div class="cat-detail-grid-head">
+            <div class="cat-col-time">时间</div>
+            <div class="cat-col-source">来源</div>
+            <div class="cat-col-counterparty">交易对方</div>
+            <div class="cat-col-product">商品</div>
+            <div class="cat-col-amount cat-col-right">金额</div>
+            <div class="cat-col-payment">支付方式</div>
+            <div class="cat-col-remark">备注</div>
+          </div>
+          <div class="cat-detail-grid-body">
             ${data.items.map(tx => `
-              <tr>
-                <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
-                <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : tx.source === "image" ? "图片" : "手动"}</td>
-                <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.counterparty || ""}">${tx.counterparty || "—"}</td>
-                <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.product || ""}">${tx.product || "—"}</td>
-                <td style="text-align:right;font-weight:600;color:${tx.direction === "income" ? "var(--income)" : "var(--expense)"}">${fmtMoney(tx.amount)}</td>
-                <td>${tx.payment_method || "—"}</td>
-                <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.remark || ""}">${tx.remark || "—"}</td>
-              </tr>
+              <div class="cat-detail-grid-row">
+                <div class="cat-col-time" style="white-space:nowrap">${fmtDate(tx.transaction_time)}</div>
+                <div class="cat-col-source">${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : tx.source === "image" ? "图片" : "手动"}</div>
+                <div class="cat-col-counterparty cat-detail-ellipsis" title="${tx.counterparty || ""}">${tx.counterparty || "—"}</div>
+                <div class="cat-col-product cat-detail-ellipsis" title="${tx.product || ""}">${tx.product || "—"}</div>
+                <div class="cat-col-amount cat-col-right" style="font-weight:600;color:${tx.direction === "income" ? "var(--income)" : "var(--expense)"}">${fmtMoney(tx.amount)}</div>
+                <div class="cat-col-payment cat-detail-ellipsis" title="${tx.payment_method || ""}">${tx.payment_method || "—"}</div>
+                <div class="cat-col-remark cat-detail-ellipsis" title="${tx.remark || ""}">${tx.remark || "—"}</div>
+              </div>
             `).join("")}
-          </tbody>
-        </table>
+          </div>
+        </div>
         ${totalPages > 1 ? `
           <div class="detail-pager">
             <span>第 ${page}/${totalPages} 页，共 ${data.total} 条</span>

@@ -378,7 +378,7 @@ const Transactions = {
             <th>交易对方</th>
             <th>商品</th>
             <th>方向</th>
-            <th style="text-align:right">金额</th>
+            <th>金额</th>
             <th>支付方式</th>
             <th>备注</th>
             <th>操作</th>
@@ -402,7 +402,7 @@ const Transactions = {
                 ${tx.product || "—"}
               </td>
               <td>${directionBadge(tx.direction)}</td>
-              <td style="text-align:right;font-weight:600;
+              <td style="font-weight:600;
                 color:${tx.direction === "income" ? "var(--income)" : tx.direction === "expense" ? "var(--expense)" : "inherit"}">
                 ${fmtMoney(tx.amount)}
               </td>
