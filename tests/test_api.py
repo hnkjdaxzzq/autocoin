@@ -271,3 +271,54 @@ class TestClassificationRules:
         assert list_resp.status_code == 200
         items = list_resp.json()["items"]
         assert any(item["category"] == "咖啡饮品" for item in items)
+
+
+class TestImageImport:
+    def test_check_duplicates_and_confirm_image_import(self, client, auth_headers):
+        existing_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-03-10 09:00:00",
+            "direction": "expense",
+            "amount": 20,
+            "category": "餐饮美食",
+            "counterparty": "美团外卖",
+            "remark": "已有记录",
+        })
+        assert existing_resp.status_code == 201
+
+        transactions = [
+            {
+                "transaction_time": "2025-03-10 09:00:00",
+                "direction": "expense",
+                "amount": 20,
+                "category": "",
+                "counterparty": "美团外卖",
+                "product": "早餐",
+                "payment_method": "微信",
+                "remark": "",
+            },
+            {
+                "transaction_time": "2025-03-11 12:00:00",
+                "direction": "expense",
+                "amount": 35,
+                "category": "",
+                "counterparty": "星巴克",
+                "product": "拿铁",
+                "payment_method": "支付宝",
+                "remark": "",
+            },
+        ]
+
+        dup_resp = client.post("/api/v1/imports/image/check-duplicates", headers=auth_headers, json={
+            "transactions": transactions,
+        })
+        assert dup_resp.status_code == 200
+        assert dup_resp.json()["duplicates"] == [True, False]
+
+        confirm_resp = client.post("/api/v1/imports/image/confirm", headers=auth_headers, json={
+            "transactions": transactions,
+            "filenames": ["receipt-1.jpg", "receipt-2.jpg"],
+        })
+        assert confirm_resp.status_code == 200
+        data = confirm_resp.json()
+        assert data["imported_rows"] == 1
+        assert data["duplicate_rows"] == 1

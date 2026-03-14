@@ -1,6 +1,8 @@
 /* ===== Import page ===== */
 const Import = {
   _recognizedTransactions: [],  // holds preview data for image imports
+  _categories: [],
+  _selectedReviewIdxs: new Set(),
 
   render(container) {
     container.innerHTML = `
@@ -77,6 +79,7 @@ const Import = {
     Import._bindImageDrop(container);
     Import._loadHistory(container);
     Import._loadImageQuota(container);
+    Import._loadCategories();
   },
 
   /* ---- Tab switching ---- */
@@ -199,6 +202,15 @@ const Import = {
     } catch (_) { bar.style.display = "none"; }
   },
 
+  async _loadCategories() {
+    try {
+      const res = await API.transactions.categories();
+      Import._categories = res.categories || [];
+    } catch (_) {
+      Import._categories = [];
+    }
+  },
+
   async _handleImageFiles(files, container) {
     if (files.length > 10) {
       alert("最多同时上传 10 张图片");
@@ -247,6 +259,9 @@ const Import = {
       clearInterval(countdownTimer);
       Import._recognizedTransactions = response.transactions || [];
       Import._imageFilenames = response.filenames || [];
+      Import._selectedReviewIdxs = new Set(
+        Import._recognizedTransactions.map((_, idx) => idx)
+      );
 
       if (Import._recognizedTransactions.length === 0) {
         statusEl.innerHTML = `<div class="img-recognize-empty">未能从图片中识别出交易记录，请检查图片内容</div>`;
@@ -271,6 +286,11 @@ const Import = {
       try {
         const dupResult = await API.imports.checkDuplicates(Import._recognizedTransactions);
         Import._dupFlags = dupResult.duplicates || [];
+        Import._selectedReviewIdxs = new Set(
+          Import._recognizedTransactions
+            .map((_, idx) => idx)
+            .filter(idx => !(Import._dupFlags && Import._dupFlags[idx]))
+        );
         const dupCount = Import._dupFlags.filter(Boolean).length;
         if (dupCount > 0) {
           statusEl.innerHTML = `
@@ -297,6 +317,7 @@ const Import = {
     const resultsEl = container.querySelector("#img-recognize-results");
     const txs = Import._recognizedTransactions;
     const isMobile = window.innerWidth <= 768;
+    const categoryOptions = Import._categories.map(c => `<option value="${Import._escAttr(c)}">`).join("");
 
     const directionOptions = (val) => {
       const opts = [
@@ -311,33 +332,73 @@ const Import = {
       return { expense: "支出", income: "收入", neutral: "不计收支" }[val] || val;
     };
 
+    const review = Import._getReviewSummary();
+    const toolbar = `
+      <div class="img-review-toolbar">
+        <div class="img-review-summary-grid">
+          <div class="img-review-summary-card">
+            <span class="label">识别条数</span>
+            <strong>${review.total}</strong>
+          </div>
+          <div class="img-review-summary-card">
+            <span class="label">将导入</span>
+            <strong>${review.selected}</strong>
+          </div>
+          <div class="img-review-summary-card">
+            <span class="label">选中金额</span>
+            <strong>${fmtMoney(review.selectedAmount)}</strong>
+          </div>
+          <div class="img-review-summary-card ${review.anomalyCount ? "is-warn" : ""}">
+            <span class="label">异常条数</span>
+            <strong>${review.anomalyCount}</strong>
+          </div>
+          <div class="img-review-summary-card ${review.duplicateCount ? "is-warn" : ""}">
+            <span class="label">重复条数</span>
+            <strong>${review.duplicateCount}</strong>
+          </div>
+        </div>
+        <div class="img-review-actions">
+          <button class="btn btn-ghost btn-sm" id="img-select-valid-btn">全选有效项</button>
+          <button class="btn btn-ghost btn-sm" id="img-select-anomaly-btn">选中异常项</button>
+          <div class="img-review-batch">
+            <input type="text" id="img-batch-category" list="img-category-datalist" placeholder="批量改分类">
+            <datalist id="img-category-datalist">${categoryOptions}</datalist>
+            <button class="btn btn-ghost btn-sm" id="img-apply-category-btn">应用</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="img-delete-selected-btn">删除选中</button>
+        </div>
+      </div>
+    `;
+
     if (isMobile) {
-      // Card-based layout for mobile
-      const nonDupCount = txs.filter((_, i) => !(Import._dupFlags && Import._dupFlags[i])).length;
       resultsEl.innerHTML = `
         <div class="card img-preview-card">
           <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
             <span>识别结果预览</span>
             <div style="display:flex;gap:8px">
               <button class="btn btn-ghost" id="img-cancel-btn">取消</button>
-              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${nonDupCount})</button>
+              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${review.selected})</button>
             </div>
           </div>
+          ${toolbar}
           <div class="img-mobile-cards">
             ${txs.map((t, i) => {
               const isDup = Import._dupFlags && Import._dupFlags[i];
+              const issues = Import._getRowIssues(t, i);
+              const selected = Import._selectedReviewIdxs.has(i);
               return `
-              <div class="img-mobile-card${isDup ? " img-dup-row" : ""}" data-idx="${i}">
+              <div class="img-mobile-card${isDup ? " img-dup-row" : ""}${issues.length ? " img-anomaly-row" : ""}" data-idx="${i}">
                 <div class="img-mobile-card-header">
-                  <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
+                  <input type="checkbox" class="img-row-check" data-idx="${i}" ${selected ? "checked" : ""}>
                   ${isDup ? '<span class="img-dup-badge">重复</span>' : ""}
+                  ${issues.filter(issue => issue.type !== "duplicate").map(issue => `<span class="img-issue-badge">${issue.label}</span>`).join("")}
                   <span class="img-mobile-card-dir ${t.direction}">${directionLabel(t.direction)}</span>
                   <span class="img-mobile-card-amount ${t.direction}">¥${t.amount.toFixed(2)}</span>
                 </div>
                 <div class="img-mobile-card-body">
                   <div class="img-mobile-field">
                     <label>时间</label>
-                    <input type="text" class="img-cell-input" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}">
+                    <input type="text" class="img-cell-input ${Import._hasIssue(issues, "transaction_time") ? "input-error" : ""}" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}">
                   </div>
                   <div class="img-mobile-field">
                     <label>类型</label>
@@ -345,11 +406,11 @@ const Import = {
                   </div>
                   <div class="img-mobile-field">
                     <label>金额</label>
-                    <input type="number" class="img-cell-input" data-field="amount" value="${t.amount}" step="0.01" min="0">
+                    <input type="number" class="img-cell-input ${Import._hasIssue(issues, "amount") ? "input-error" : ""}" data-field="amount" value="${t.amount}" step="0.01" min="0">
                   </div>
                   <div class="img-mobile-field">
                     <label>分类</label>
-                    <input type="text" class="img-cell-input" data-field="category" value="${Import._escAttr(t.category)}">
+                    <input type="text" class="img-cell-input ${Import._hasIssue(issues, "category") ? "input-warning" : ""}" list="img-category-datalist" data-field="category" value="${Import._escAttr(t.category)}">
                   </div>
                   <div class="img-mobile-field">
                     <label>对方</label>
@@ -374,17 +435,16 @@ const Import = {
         </div>
       `;
     } else {
-      // Table layout for desktop
-      const nonDupCount = txs.filter((_, i) => !(Import._dupFlags && Import._dupFlags[i])).length;
       resultsEl.innerHTML = `
         <div class="card img-preview-card">
-          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
             <span>识别结果预览</span>
-            <div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-ghost" id="img-cancel-btn">取消</button>
-              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${nonDupCount})</button>
+              <button class="btn btn-primary" id="img-confirm-btn">确认导入 (${review.selected})</button>
             </div>
           </div>
+          ${toolbar}
           <div class="img-preview-table-wrap">
             <table class="img-preview-table">
               <thead>
@@ -398,25 +458,29 @@ const Import = {
                   <th>商品/描述</th>
                   <th>支付方式</th>
                   <th>备注</th>
+                  <th>提示</th>
                 </tr>
               </thead>
               <tbody>
                 ${txs.map((t, i) => {
                   const isDup = Import._dupFlags && Import._dupFlags[i];
+                  const issues = Import._getRowIssues(t, i);
+                  const selected = Import._selectedReviewIdxs.has(i);
                   return `
-                  <tr data-idx="${i}" class="${isDup ? "img-dup-row" : ""}">
+                  <tr data-idx="${i}" class="${isDup ? "img-dup-row" : ""}${issues.length ? " img-anomaly-row" : ""}">
                     <td style="white-space:nowrap">
-                      <input type="checkbox" class="img-row-check" data-idx="${i}" ${isDup ? "" : "checked"}>
+                      <input type="checkbox" class="img-row-check" data-idx="${i}" ${selected ? "checked" : ""}>
                       ${isDup ? '<span class="img-dup-badge" title="数据库中已存在">重复</span>' : ""}
                     </td>
-                    <td><input type="text" class="img-cell-input img-cell-time" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}" placeholder="YYYY-MM-DD HH:MM:SS"></td>
+                    <td><input type="text" class="img-cell-input img-cell-time ${Import._hasIssue(issues, "transaction_time") ? "input-error" : ""}" data-field="transaction_time" value="${Import._escAttr(t.transaction_time)}" placeholder="YYYY-MM-DD HH:MM:SS"></td>
                     <td><select class="img-cell-select" data-field="direction">${directionOptions(t.direction)}</select></td>
-                    <td><input type="number" class="img-cell-input img-cell-amount" data-field="amount" value="${t.amount}" step="0.01" min="0"></td>
-                    <td><input type="text" class="img-cell-input" data-field="category" value="${Import._escAttr(t.category)}"></td>
+                    <td><input type="number" class="img-cell-input img-cell-amount ${Import._hasIssue(issues, "amount") ? "input-error" : ""}" data-field="amount" value="${t.amount}" step="0.01" min="0"></td>
+                    <td><input type="text" class="img-cell-input ${Import._hasIssue(issues, "category") ? "input-warning" : ""}" list="img-category-datalist" data-field="category" value="${Import._escAttr(t.category)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="counterparty" value="${Import._escAttr(t.counterparty)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="product" value="${Import._escAttr(t.product)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="payment_method" value="${Import._escAttr(t.payment_method)}"></td>
                     <td><input type="text" class="img-cell-input" data-field="remark" value="${Import._escAttr(t.remark)}"></td>
+                    <td><div class="img-issue-list">${issues.length ? issues.map(issue => `<span class="img-issue-badge">${issue.label}</span>`).join("") : '<span class="img-issue-ok">正常</span>'}</div></td>
                   </tr>`;
                 }).join("")}
               </tbody>
@@ -435,25 +499,69 @@ const Import = {
         let val = el.value;
         if (field === "amount") val = parseFloat(val) || 0;
         Import._recognizedTransactions[idx][field] = val;
+        Import._renderPreviewTable(container);
       });
     });
 
     // Cancel button
     resultsEl.querySelector("#img-cancel-btn").addEventListener("click", () => {
       Import._recognizedTransactions = [];
+      Import._selectedReviewIdxs = new Set();
       resultsEl.innerHTML = "";
       container.querySelector("#img-recognize-status").innerHTML = "";
       container.querySelector("#img-preview-list").innerHTML = "";
     });
 
-    // Update confirm button count when checkboxes change
-    const updateConfirmCount = () => {
-      const checked = resultsEl.querySelectorAll(".img-row-check:checked").length;
-      const btn = resultsEl.querySelector("#img-confirm-btn");
-      if (btn) btn.textContent = `确认导入 (${checked})`;
+    const updateSelection = () => {
+      Import._selectedReviewIdxs = new Set(
+        Array.from(resultsEl.querySelectorAll(".img-row-check:checked")).map(cb => parseInt(cb.dataset.idx))
+      );
+      Import._renderPreviewTable(container);
     };
     resultsEl.querySelectorAll(".img-row-check").forEach(cb => {
-      cb.addEventListener("change", updateConfirmCount);
+      cb.addEventListener("change", updateSelection);
+    });
+
+    resultsEl.querySelector("#img-select-valid-btn")?.addEventListener("click", () => {
+      Import._selectedReviewIdxs = new Set(
+        txs
+          .map((_, idx) => idx)
+          .filter(idx => !Import._getRowIssues(Import._recognizedTransactions[idx], idx).some(issue => issue.type === "duplicate"))
+      );
+      Import._renderPreviewTable(container);
+    });
+
+    resultsEl.querySelector("#img-select-anomaly-btn")?.addEventListener("click", () => {
+      Import._selectedReviewIdxs = new Set(
+        txs.map((_, idx) => idx).filter(idx => Import._getRowIssues(Import._recognizedTransactions[idx], idx).some(issue => issue.type !== "duplicate"))
+      );
+      Import._renderPreviewTable(container);
+    });
+
+    resultsEl.querySelector("#img-apply-category-btn")?.addEventListener("click", () => {
+      const category = (resultsEl.querySelector("#img-batch-category")?.value || "").trim();
+      if (!category) return alert("请先填写要批量应用的分类");
+      if (!Import._selectedReviewIdxs.size) return alert("请先选择要修改的记录");
+      Import._selectedReviewIdxs.forEach(idx => {
+        if (Import._recognizedTransactions[idx]) Import._recognizedTransactions[idx].category = category;
+      });
+      Import._renderPreviewTable(container);
+    });
+
+    resultsEl.querySelector("#img-delete-selected-btn")?.addEventListener("click", () => {
+      if (!Import._selectedReviewIdxs.size) return alert("请先选择要删除的记录");
+      const keepIdxs = txs.map((_, idx) => idx).filter(idx => !Import._selectedReviewIdxs.has(idx));
+      Import._recognizedTransactions = keepIdxs.map(idx => Import._recognizedTransactions[idx]);
+      Import._dupFlags = keepIdxs.map(idx => Import._dupFlags?.[idx] || false);
+      Import._selectedReviewIdxs = new Set(
+        Import._recognizedTransactions.map((_, idx) => idx).filter(idx => !(Import._dupFlags && Import._dupFlags[idx]))
+      );
+      if (!Import._recognizedTransactions.length) {
+        resultsEl.innerHTML = "";
+        container.querySelector("#img-recognize-status").innerHTML = `<div class="img-recognize-empty">预览记录已全部移除，可重新上传图片识别</div>`;
+        return;
+      }
+      Import._renderPreviewTable(container);
     });
 
     // Confirm button
@@ -467,10 +575,7 @@ const Import = {
     const statusEl = container.querySelector("#img-recognize-status");
 
     // Collect checked rows only
-    const checkedIdxs = new Set();
-    resultsEl.querySelectorAll(".img-row-check:checked").forEach(cb => {
-      checkedIdxs.add(parseInt(cb.dataset.idx));
-    });
+    const checkedIdxs = new Set(Import._selectedReviewIdxs);
 
     const txsToImport = Import._recognizedTransactions.filter((_, i) => checkedIdxs.has(i));
     if (!txsToImport.length) {
@@ -515,7 +620,7 @@ const Import = {
     // Disable button
     const btn = resultsEl.querySelector("#img-confirm-btn");
     btn.disabled = true;
-    btn.textContent = "导入中…";
+    btn.textContent = `导入中… (${txsToImport.length})`;
 
     try {
       const result = await API.imports.confirmImageImport(txsToImport, Import._imageFilenames || []);
@@ -536,6 +641,7 @@ const Import = {
       statusEl.innerHTML = "";
       container.querySelector("#img-preview-list").innerHTML = "";
       Import._recognizedTransactions = [];
+      Import._selectedReviewIdxs = new Set();
       Import._loadHistory(container);
       Import._loadImageQuota(container);
     } catch (err) {
@@ -543,6 +649,55 @@ const Import = {
       btn.textContent = `确认导入 (${txsToImport.length})`;
       alert("导入失败: " + err.message);
     }
+  },
+
+  _getReviewSummary() {
+    let selectedAmount = 0;
+    let anomalyCount = 0;
+    let duplicateCount = 0;
+    Import._recognizedTransactions.forEach((tx, idx) => {
+      const issues = Import._getRowIssues(tx, idx);
+      if (issues.length) anomalyCount += 1;
+      if (issues.some(issue => issue.type === "duplicate")) duplicateCount += 1;
+      if (Import._selectedReviewIdxs.has(idx)) selectedAmount += Number(tx.amount || 0);
+    });
+    return {
+      total: Import._recognizedTransactions.length,
+      selected: Import._selectedReviewIdxs.size,
+      selectedAmount,
+      anomalyCount,
+      duplicateCount,
+    };
+  },
+
+  _getRowIssues(tx, idx) {
+    const issues = [];
+    if (Import._dupFlags && Import._dupFlags[idx]) {
+      issues.push({ type: "duplicate", field: "duplicate-row", label: "重复" });
+    }
+    if (!Import._isValidTime(tx.transaction_time)) {
+      issues.push({ type: "invalid-time", field: "transaction_time", label: "时间异常" });
+    }
+    if (!(Number(tx.amount) > 0)) {
+      issues.push({ type: "invalid-amount", field: "amount", label: "金额异常" });
+    }
+    if (!tx.category || !tx.category.trim()) {
+      issues.push({ type: "missing-category", field: "category", label: "缺分类" });
+    }
+    return issues;
+  },
+
+  _hasIssue(issues, field) {
+    return issues.some(issue => issue.field === field);
+  },
+
+  _isValidTime(value) {
+    if (!value || !String(value).trim()) return false;
+    const trimmed = String(value).trim();
+    const timeRe = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/;
+    if (!timeRe.test(trimmed)) return false;
+    const d = new Date(trimmed.replace(" ", "T"));
+    return !isNaN(d.getTime());
   },
 
   _escAttr(str) {
