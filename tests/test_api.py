@@ -271,3 +271,52 @@ class TestClassificationRules:
         assert list_resp.status_code == 200
         items = list_resp.json()["items"]
         assert any(item["category"] == "咖啡饮品" for item in items)
+
+
+class TestFileImportPreview:
+    def test_preview_and_confirm_file_import(self, client, auth_headers):
+        existing_csv = _make_alipay_csv([
+            [
+                "2025-03-20 09:00:00", "餐饮美食", "美团外卖", "mt@example.com",
+                "早餐", "支出", "20.00", "支付宝", "交易成功",
+                "2025032009000001", "M001", "",
+            ],
+        ])
+        create_resp = client.post("/api/v1/imports", headers=auth_headers, files={
+            "file": ("existing.csv", existing_csv, "text/csv"),
+        })
+        assert create_resp.status_code == 200
+
+        preview_csv = _make_alipay_csv([
+            [
+                "2025-03-20 09:00:00", "餐饮美食", "美团外卖", "mt@example.com",
+                "早餐", "支出", "20.00", "支付宝", "交易成功",
+                "2025032009000001", "M001", "",
+            ],
+            [
+                "2025-03-21 12:00:00", "", "星巴克", "sb@example.com",
+                "拿铁", "支出", "32.00", "支付宝", "交易成功",
+                "2025032112000001", "M002", "",
+            ],
+        ])
+        preview_resp = client.post("/api/v1/imports/preview", headers=auth_headers, files={
+            "file": ("preview.csv", preview_csv, "text/csv"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["total_rows"] == 2
+        assert preview["duplicate_rows"] == 1
+        assert preview["anomaly_rows"] == 1
+        assert preview["duplicates"] == [True, False]
+
+        confirm_resp = client.post("/api/v1/imports/confirm", headers=auth_headers, json={
+            "filename": preview["filename"],
+            "source": preview["source"],
+            "transactions": [
+                {**preview["items"][1], "category": "咖啡饮品"},
+            ],
+        })
+        assert confirm_resp.status_code == 200
+        data = confirm_resp.json()
+        assert data["imported_rows"] == 1
+        assert data["duplicate_rows"] == 0

@@ -64,6 +64,10 @@ class DataRepository(ABC):
         """Returns (inserted_count, duplicate_count)."""
         ...
 
+    @abstractmethod
+    def check_import_duplicates(self, items: list[dict]) -> list[bool]:
+        ...
+
     # ---------- Statistics ----------
 
     @abstractmethod

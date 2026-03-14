@@ -60,3 +60,44 @@ class ImageRecognizeResponse(BaseModel):
     filenames: list[str] = []
     daily_used: Optional[int] = None
     daily_limit: Optional[int] = None
+
+
+class FileTransactionItem(BaseModel):
+    source: str
+    source_order_id: str
+    merchant_order_id: str = ""
+    transaction_time: str
+    transaction_type: str = ""
+    category: str = ""
+    counterparty: str = ""
+    counterparty_account: str = ""
+    product: str = ""
+    direction: str
+    amount: float
+    payment_method: str = ""
+    status: str = ""
+    remark: str = ""
+
+    @validator("transaction_time")
+    def validate_import_time(cls, v):
+        return ImageTransactionItem.validate_time(v)
+
+    @validator("direction")
+    def validate_import_direction(cls, v):
+        return ImageTransactionItem.validate_direction(v)
+
+    @validator("amount")
+    def validate_import_amount(cls, v):
+        return ImageTransactionItem.validate_amount(v)
+
+
+class FileImportPreviewResponse(BaseModel):
+    filename: str
+    source: str
+    total_rows: int
+    duplicate_rows: int = 0
+    anomaly_rows: int = 0
+    total_income: float = 0.0
+    total_expense: float = 0.0
+    items: list[FileTransactionItem]
+    duplicates: list[bool]
