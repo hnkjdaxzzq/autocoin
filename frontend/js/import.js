@@ -1,6 +1,10 @@
 /* ===== Import page ===== */
 const Import = {
   _recognizedTransactions: [],  // holds preview data for image imports
+  _categories: [],
+  _filePreviews: [],
+  _fileImportNotices: [],
+  _nextFilePreviewId: 1,
 
   render(container) {
     container.innerHTML = `
@@ -77,6 +81,7 @@ const Import = {
     Import._bindImageDrop(container);
     Import._loadHistory(container);
     Import._loadImageQuota(container);
+    Import._loadCategories();
   },
 
   /* ---- Tab switching ---- */
@@ -117,37 +122,54 @@ const Import = {
   async _uploadFiles(files, container) {
     const resultsEl = container.querySelector("#import-results");
     if (!files.length) return;
+    resultsEl.innerHTML = `
+      <div class="card import-result">
+        <div class="card-title">正在解析 ${files.length} 份账单…</div>
+        <div style="color:var(--text-muted);font-size:13px">会逐份生成预览卡片，你可以分别检查后再统一确认导入。</div>
+      </div>
+    `;
 
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
-
-      const card = document.createElement("div");
-      card.className = "import-result";
-      card.innerHTML = `<div class="card-title">正在导入 <strong>${file.name}</strong>…</div>`;
-      resultsEl.prepend(card);
-
       try {
-        const result = await API.imports.upload(formData);
-        const statusColor = result.status === "success" ? "#22c55e" : result.status === "failed" ? "#ef4444" : "#f59e0b";
-        card.innerHTML = `
-          <div class="card-title">✅ <strong>${result.filename}</strong>
-            <span style="color:${statusColor};font-weight:600;margin-left:8px">${result.status.toUpperCase()}</span>
-          </div>
-          <div class="result-row">
-            <div class="stat"><span class="n success">${result.imported_rows}</span><span class="l">成功导入</span></div>
-            <div class="stat"><span class="n warn">${result.duplicate_rows}</span><span class="l">重复跳过</span></div>
-            <div class="stat"><span class="n danger">${result.error_rows}</span><span class="l">解析错误</span></div>
-            <div class="stat"><span class="n">${result.total_rows}</span><span class="l">总行数</span></div>
-          </div>
-        `;
+        const preview = await API.imports.preview(formData);
+        Import._filePreviews.push(Import._createFilePreviewState(preview));
       } catch (err) {
-        card.innerHTML = `<div class="card-title" style="color:#ef4444">❌ 导入失败: ${file.name}</div>
-          <div style="color:#64748b;font-size:13px;margin-top:6px">${err.message}</div>`;
+        Import._fileImportNotices.unshift({
+          id: `notice-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: "error",
+          filename: file.name,
+          message: err.message,
+        });
       }
     }
+    Import._renderFilePreview(container);
+  },
 
-    Import._loadHistory(container);
+  _createFilePreviewState(preview) {
+    return {
+      id: Import._nextFilePreviewId++,
+      filename: preview.filename,
+      source: preview.source,
+      total_rows: preview.total_rows,
+      total_income: preview.total_income || 0,
+      total_expense: preview.total_expense || 0,
+      items: (preview.items || []).map(item => ({ ...item })),
+      duplicates: [...(preview.duplicates || [])],
+      selectedIdxs: new Set(
+        (preview.items || []).map((_, idx) => idx).filter(idx => !(preview.duplicates && preview.duplicates[idx]))
+      ),
+    };
+  },
+
+  async _loadCategories() {
+    try {
+      const res = await API.transactions.categories();
+      Import._categories = res.categories || [];
+    } catch (_) {
+      Import._categories = [];
+    }
   },
 
   /* ---- Image import ---- */
@@ -543,6 +565,345 @@ const Import = {
       btn.textContent = `确认导入 (${txsToImport.length})`;
       alert("导入失败: " + err.message);
     }
+  },
+
+  _renderFilePreview(container) {
+    const resultsEl = container.querySelector("#import-results");
+    if (!Import._filePreviews.length && !Import._fileImportNotices.length) {
+      resultsEl.innerHTML = "";
+      return;
+    }
+
+    const overall = Import._getAllFileReviewSummary();
+    const categoryOptions = Import._categories.map(c => `<option value="${Import._escAttr(c)}">`).join("");
+    resultsEl.innerHTML = `
+      <div class="import-notice-stack">
+        ${Import._fileImportNotices.map(notice => `
+          <div class="card import-result import-notice import-notice-${notice.type}">
+            <div class="card-title">${notice.type === "success" ? "文件导入完成" : "文件处理失败"} · ${notice.filename}</div>
+            ${notice.type === "success" ? `
+              <div class="result-row">
+                <div class="stat"><span class="n success">${notice.result.imported_rows}</span><span class="l">成功导入</span></div>
+                <div class="stat"><span class="n warn">${notice.result.duplicate_rows}</span><span class="l">重复跳过</span></div>
+                <div class="stat"><span class="n danger">${notice.result.error_rows}</span><span class="l">失败</span></div>
+                <div class="stat"><span class="n">${notice.result.total_rows}</span><span class="l">总条数</span></div>
+              </div>
+            ` : `<div style="color:var(--text-muted);font-size:13px">${notice.message}</div>`}
+          </div>
+        `).join("")}
+      </div>
+      ${Import._filePreviews.length ? `
+        <div class="card img-preview-card file-review-overview">
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <span>批量文件导入预览</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost" id="file-clear-all-btn">清空预览</button>
+              <button class="btn btn-primary" id="file-confirm-all-btn">全部确认导入 (${overall.selected})</button>
+            </div>
+          </div>
+          <div class="img-review-summary-grid">
+            <div class="img-review-summary-card"><span class="label">文件数</span><strong>${overall.files}</strong></div>
+            <div class="img-review-summary-card"><span class="label">总条数</span><strong>${overall.total}</strong></div>
+            <div class="img-review-summary-card"><span class="label">将导入</span><strong>${overall.selected}</strong></div>
+            <div class="img-review-summary-card"><span class="label">总收入</span><strong>${fmtMoney(overall.totalIncome)}</strong></div>
+            <div class="img-review-summary-card"><span class="label">总支出</span><strong>${fmtMoney(overall.totalExpense)}</strong></div>
+            <div class="img-review-summary-card ${overall.anomalyCount ? "is-warn" : ""}"><span class="label">异常条数</span><strong>${overall.anomalyCount}</strong></div>
+            <div class="img-review-summary-card ${overall.duplicateCount ? "is-warn" : ""}"><span class="label">重复条数</span><strong>${overall.duplicateCount}</strong></div>
+          </div>
+        </div>
+        <div class="file-review-list">
+          ${Import._filePreviews.map(previewState => {
+            const summary = Import._getFileReviewSummary(previewState);
+            return `
+              <div class="card img-preview-card file-review-card" data-file-preview-id="${previewState.id}">
+                <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                  <span>文件导入预览 · ${previewState.filename}</span>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-ghost file-cancel-btn" data-preview-id="${previewState.id}">移除</button>
+                    <button class="btn btn-primary file-confirm-btn" data-preview-id="${previewState.id}">确认导入 (${summary.selected})</button>
+                  </div>
+                </div>
+                <div class="img-review-toolbar">
+                  <div class="img-review-summary-grid">
+                    <div class="img-review-summary-card"><span class="label">总条数</span><strong>${summary.total}</strong></div>
+                    <div class="img-review-summary-card"><span class="label">将导入</span><strong>${summary.selected}</strong></div>
+                    <div class="img-review-summary-card"><span class="label">总收入</span><strong>${fmtMoney(previewState.total_income || 0)}</strong></div>
+                    <div class="img-review-summary-card"><span class="label">总支出</span><strong>${fmtMoney(previewState.total_expense || 0)}</strong></div>
+                    <div class="img-review-summary-card ${summary.anomalyCount ? "is-warn" : ""}"><span class="label">异常条数</span><strong>${summary.anomalyCount}</strong></div>
+                    <div class="img-review-summary-card ${summary.duplicateCount ? "is-warn" : ""}"><span class="label">重复条数</span><strong>${summary.duplicateCount}</strong></div>
+                  </div>
+                  <div class="img-review-actions">
+                    <button class="btn btn-ghost btn-sm file-select-valid-btn" data-preview-id="${previewState.id}">全选有效项</button>
+                    <button class="btn btn-ghost btn-sm file-select-anomaly-btn" data-preview-id="${previewState.id}">选中异常项</button>
+                    <div class="img-review-batch">
+                      <input type="text" class="file-batch-category" data-preview-id="${previewState.id}" list="file-category-datalist-${previewState.id}" placeholder="批量改分类">
+                      <datalist id="file-category-datalist-${previewState.id}">${categoryOptions}</datalist>
+                      <button class="btn btn-ghost btn-sm file-apply-category-btn" data-preview-id="${previewState.id}">应用</button>
+                    </div>
+                    <button class="btn btn-ghost btn-sm file-delete-selected-btn" data-preview-id="${previewState.id}">删除选中</button>
+                  </div>
+                </div>
+                <div class="img-preview-table-wrap">
+                  <table class="img-preview-table file-preview-table">
+                    <thead>
+                      <tr>
+                        <th style="width:40px"></th>
+                        <th style="min-width:155px">时间</th>
+                        <th>方向</th>
+                        <th>金额</th>
+                        <th>分类</th>
+                        <th>交易对方</th>
+                        <th>商品</th>
+                        <th>支付方式</th>
+                        <th>备注</th>
+                        <th>提示</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${previewState.items.map((item, idx) => {
+                        const issues = Import._getFileRowIssues(previewState, item, idx);
+                        return `
+                          <tr data-preview-id="${previewState.id}" data-file-idx="${idx}" class="${issues.length ? " img-anomaly-row" : ""}${previewState.duplicates[idx] ? " img-dup-row" : ""}">
+                            <td style="white-space:nowrap">
+                              <input type="checkbox" class="file-row-check" data-preview-id="${previewState.id}" data-idx="${idx}" ${previewState.selectedIdxs.has(idx) ? "checked" : ""}>
+                              ${previewState.duplicates[idx] ? '<span class="img-dup-badge">重复</span>' : ""}
+                            </td>
+                            <td>${fmtDate(item.transaction_time)}</td>
+                            <td>${item.direction === "income" ? "收入" : item.direction === "expense" ? "支出" : "不计收支"}</td>
+                            <td style="font-weight:600;color:${item.direction === "income" ? "var(--income)" : item.direction === "expense" ? "var(--expense)" : "inherit"}">${fmtMoney(item.amount)}</td>
+                            <td><input type="text" class="img-cell-input ${Import._fileHasIssue(issues, "category") ? "input-warning" : ""}" list="file-category-datalist-${previewState.id}" data-preview-id="${previewState.id}" data-field="category" value="${Import._escAttr(item.category)}"></td>
+                            <td>${item.counterparty || "—"}</td>
+                            <td>${item.product || "—"}</td>
+                            <td>${item.payment_method || "—"}</td>
+                            <td><input type="text" class="img-cell-input" data-preview-id="${previewState.id}" data-field="remark" value="${Import._escAttr(item.remark)}"></td>
+                            <td><div class="img-issue-list">${issues.length ? issues.map(issue => `<span class="img-issue-badge">${issue.label}</span>`).join("") : '<span class="img-issue-ok">正常</span>'}</div></td>
+                          </tr>`;
+                      }).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : ""}
+    `;
+
+    resultsEl.querySelector("#file-clear-all-btn")?.addEventListener("click", () => {
+      Import._filePreviews = [];
+      Import._renderFilePreview(container);
+    });
+
+    resultsEl.querySelector("#file-confirm-all-btn")?.addEventListener("click", () => {
+      Import._confirmAllFileImports(container);
+    });
+
+    resultsEl.querySelectorAll(".file-row-check").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const previewState = Import._getFilePreviewState(Number(cb.dataset.previewId));
+        if (!previewState) return;
+        const idx = Number(cb.dataset.idx);
+        if (cb.checked) previewState.selectedIdxs.add(idx);
+        else previewState.selectedIdxs.delete(idx);
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll("[data-file-idx] .img-cell-input").forEach(input => {
+      input.addEventListener("change", () => {
+        const row = input.closest("[data-file-idx]");
+        const previewState = Import._getFilePreviewState(Number(row.dataset.previewId));
+        if (!previewState) return;
+        const idx = Number(row.dataset.fileIdx);
+        const field = input.dataset.field;
+        previewState.items[idx][field] = input.value.trim();
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-cancel-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        Import._removeFilePreview(Number(btn.dataset.previewId));
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-select-valid-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const previewState = Import._getFilePreviewState(Number(btn.dataset.previewId));
+        if (!previewState) return;
+        previewState.selectedIdxs = new Set(
+          previewState.items
+            .map((_, idx) => idx)
+            .filter(idx => !Import._getFileRowIssues(previewState, previewState.items[idx], idx).some(issue => issue.type === "duplicate"))
+        );
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-select-anomaly-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const previewState = Import._getFilePreviewState(Number(btn.dataset.previewId));
+        if (!previewState) return;
+        previewState.selectedIdxs = new Set(
+          previewState.items
+            .map((_, idx) => idx)
+            .filter(idx => Import._getFileRowIssues(previewState, previewState.items[idx], idx).length > 0)
+        );
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-apply-category-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const previewId = Number(btn.dataset.previewId);
+        const previewState = Import._getFilePreviewState(previewId);
+        if (!previewState) return;
+        const category = (resultsEl.querySelector(`.file-batch-category[data-preview-id="${previewId}"]`)?.value || "").trim();
+        if (!category) return alert("请先填写要批量应用的分类");
+        if (!previewState.selectedIdxs.size) return alert("请先选择要修改的记录");
+        previewState.selectedIdxs.forEach(idx => {
+          if (previewState.items[idx]) previewState.items[idx].category = category;
+        });
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-delete-selected-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const previewState = Import._getFilePreviewState(Number(btn.dataset.previewId));
+        if (!previewState) return;
+        if (!previewState.selectedIdxs.size) return alert("请先选择要删除的记录");
+        const keepIdxs = previewState.items
+          .map((_, idx) => idx)
+          .filter(idx => !previewState.selectedIdxs.has(idx));
+        previewState.items = keepIdxs.map(idx => previewState.items[idx]);
+        previewState.duplicates = keepIdxs.map(idx => previewState.duplicates[idx]);
+        previewState.selectedIdxs = new Set(
+          previewState.items.map((_, idx) => idx).filter(idx => !previewState.duplicates[idx])
+        );
+        Import._renderFilePreview(container);
+      });
+    });
+
+    resultsEl.querySelectorAll(".file-confirm-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        Import._confirmSingleFileImport(container, Number(btn.dataset.previewId));
+      });
+    });
+  },
+
+  _getFilePreviewState(previewId) {
+    return Import._filePreviews.find(preview => preview.id === previewId) || null;
+  },
+
+  _removeFilePreview(previewId) {
+    Import._filePreviews = Import._filePreviews.filter(preview => preview.id !== previewId);
+  },
+
+  async _submitFileImport(previewState) {
+    const txsToImport = previewState.items.filter((_, idx) => previewState.selectedIdxs.has(idx));
+    if (!txsToImport.length) {
+      throw new Error("请至少选择一条记录");
+    }
+    return API.imports.confirmFileImport(previewState.filename, previewState.source, txsToImport);
+  },
+
+  _pushFileImportNotice(notice) {
+    Import._fileImportNotices.unshift({
+      id: `notice-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ...notice,
+    });
+    Import._fileImportNotices = Import._fileImportNotices.slice(0, 6);
+  },
+
+  async _confirmSingleFileImport(container, previewId) {
+    const previewState = Import._getFilePreviewState(previewId);
+    if (!previewState) return;
+    try {
+      const result = await Import._submitFileImport(previewState);
+      Import._pushFileImportNotice({ type: "success", filename: previewState.filename, result });
+      Import._removeFilePreview(previewId);
+      Import._renderFilePreview(container);
+      Import._loadHistory(container);
+    } catch (err) {
+      alert("导入失败: " + err.message);
+    }
+  },
+
+  async _confirmAllFileImports(container) {
+    const candidates = [...Import._filePreviews].filter(preview => preview.selectedIdxs.size > 0);
+    if (!candidates.length) return alert("请至少选择一条记录");
+
+    let importedFiles = 0;
+    for (const previewState of candidates) {
+      try {
+        const result = await Import._submitFileImport(previewState);
+        Import._pushFileImportNotice({ type: "success", filename: previewState.filename, result });
+        Import._removeFilePreview(previewState.id);
+        importedFiles += 1;
+      } catch (err) {
+        Import._pushFileImportNotice({ type: "error", filename: previewState.filename, message: err.message });
+      }
+    }
+    Import._renderFilePreview(container);
+    if (importedFiles > 0) {
+      Import._loadHistory(container);
+    }
+  },
+
+  _getAllFileReviewSummary() {
+    return Import._filePreviews.reduce((acc, previewState) => {
+      const summary = Import._getFileReviewSummary(previewState);
+      acc.files += 1;
+      acc.total += summary.total;
+      acc.selected += summary.selected;
+      acc.anomalyCount += summary.anomalyCount;
+      acc.duplicateCount += summary.duplicateCount;
+      acc.totalIncome += previewState.total_income || 0;
+      acc.totalExpense += previewState.total_expense || 0;
+      return acc;
+    }, {
+      files: 0,
+      total: 0,
+      selected: 0,
+      anomalyCount: 0,
+      duplicateCount: 0,
+      totalIncome: 0,
+      totalExpense: 0,
+    });
+  },
+
+  _getFileReviewSummary(previewState) {
+    let anomalyCount = 0;
+    let duplicateCount = 0;
+    if (!previewState) return { total: 0, selected: 0, anomalyCount: 0, duplicateCount: 0 };
+    previewState.items.forEach((item, idx) => {
+      const issues = Import._getFileRowIssues(previewState, item, idx);
+      if (issues.length) anomalyCount += 1;
+      if (issues.some(issue => issue.type === "duplicate")) duplicateCount += 1;
+    });
+    return {
+      total: previewState.items.length,
+      selected: previewState.selectedIdxs.size,
+      anomalyCount,
+      duplicateCount,
+    };
+  },
+
+  _getFileRowIssues(previewState, item, idx) {
+    const issues = [];
+    if (previewState?.duplicates?.[idx]) {
+      issues.push({ type: "duplicate", field: "row", label: "重复" });
+    }
+    if (!item.category || !item.category.trim()) {
+      issues.push({ type: "missing-category", field: "category", label: "缺分类" });
+    }
+    return issues;
+  },
+
+  _fileHasIssue(issues, field) {
+    return issues.some(issue => issue.field === field);
   },
 
   _escAttr(str) {

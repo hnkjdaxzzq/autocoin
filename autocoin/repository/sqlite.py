@@ -301,12 +301,15 @@ class SQLiteRepository(DataRepository):
         rows = []
         for item in items:
             item = self._apply_classification_rules(item)
+            transaction_time = item["transaction_time"]
+            if isinstance(transaction_time, str):
+                transaction_time = datetime.fromisoformat(transaction_time.replace("T", " "))
             row = {
                 "user_id": self._user_id,
                 "source": item["source"],
                 "source_order_id": item.get("source_order_id"),
                 "merchant_order_id": item.get("merchant_order_id"),
-                "transaction_time": item["transaction_time"],
+                "transaction_time": transaction_time,
                 "transaction_type": item.get("transaction_type"),
                 "category": item.get("category"),
                 "counterparty": item.get("counterparty"),
@@ -533,6 +536,29 @@ class SQLiteRepository(DataRepository):
             if counterparty:
                 q = q.filter(Transaction.counterparty == counterparty)
             results.append(q.first() is not None)
+        return results
+
+    def check_import_duplicates(self, items: list[dict]) -> list[bool]:
+        """Check duplicates for bill imports using source/source_order_id when available."""
+        results = []
+        for item in items:
+            source = item.get("source")
+            source_order_id = item.get("source_order_id")
+            if source and source_order_id:
+                exists = (
+                    self._db.query(Transaction.id)
+                    .filter(
+                        Transaction.user_id == self._user_id,
+                        Transaction.is_deleted == 0,
+                        Transaction.source == source,
+                        Transaction.source_order_id == source_order_id,
+                    )
+                    .first()
+                    is not None
+                )
+                results.append(exists)
+                continue
+            results.extend(self.check_duplicates([item]))
         return results
 
     def count_today_image_imports(self) -> int:

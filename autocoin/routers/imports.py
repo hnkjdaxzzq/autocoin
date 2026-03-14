@@ -10,6 +10,8 @@ from autocoin.database import get_db
 from autocoin.models.user import User
 from autocoin.repository.sqlite import SQLiteRepository
 from autocoin.schemas.import_schema import (
+    FileImportPreviewResponse,
+    FileTransactionItem,
     ImageRecognizeResponse,
     ImageTransactionItem,
     ImportBatchResponse,
@@ -55,6 +57,77 @@ async def upload_bill(
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
     return result
+
+
+@router.post("/preview", response_model=FileImportPreviewResponse)
+async def preview_bill(
+    file: UploadFile = File(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext not in ("csv", "xlsx"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .csv (Alipay) and .xlsx (WeChat) files are supported",
+        )
+
+    file_bytes = await file.read()
+    service = ImportService(repo)
+    try:
+        result = service.preview_file(file_bytes, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+    return result
+
+
+@router.post("/confirm", response_model=ImportBatchResponse)
+async def confirm_bill_import(
+    filename: str = Body(...),
+    source: str = Body(...),
+    transactions: list[FileTransactionItem] = Body(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not transactions:
+        raise HTTPException(status_code=400, detail="没有可导入的账单记录")
+
+    batch_id = str(uuid.uuid4())
+    repo.create_import_batch(
+        {
+            "id": batch_id,
+            "filename": filename,
+            "source": source,
+            "status": "pending",
+            "total_rows": len(transactions),
+            "imported_rows": 0,
+            "duplicate_rows": 0,
+            "error_rows": 0,
+        }
+    )
+
+    items = [item.model_dump() for item in transactions]
+    try:
+        inserted, duplicates = repo.bulk_insert_transactions(items, batch_id)
+        error_rows = len(items) - inserted - duplicates
+        status = "success" if error_rows == 0 else ("partial" if inserted > 0 else "failed")
+        repo.update_import_batch(
+            batch_id,
+            {
+                "imported_rows": inserted,
+                "duplicate_rows": duplicates,
+                "error_rows": error_rows,
+                "status": status,
+            },
+        )
+    except Exception:
+        repo.update_import_batch(batch_id, {"status": "failed"})
+        raise
+
+    return repo.get_import_batch(batch_id)
 
 
 @router.get("", response_model=list[ImportBatchResponse])
