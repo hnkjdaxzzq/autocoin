@@ -1299,7 +1299,7 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  min-width: 900px;
+  min-width: 1080px;
 }
 .img-preview-table th {
   background: var(--bg);
@@ -1563,6 +1563,9 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 }
 .img-dup-row td { background: #fffbeb !important; }
 .img-dup-row:hover td { background: #fef3c7 !important; }
+.img-mobile-card.img-anomaly-row {
+  border-color: #fcd34d;
+}
 .img-dup-badge {
   display: inline-block;
   font-size: 10px;
