@@ -1394,6 +1394,29 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 .img-anomaly-row td {
   background: rgba(245, 158, 11, 0.06);
 }
+.file-review-overview {
+  margin-bottom: 16px;
+}
+.file-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.import-notice-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.import-notice {
+  border-left: 4px solid var(--border);
+}
+.import-notice-success {
+  border-left-color: var(--income);
+}
+.import-notice-error {
+  border-left-color: var(--expense);
+}
 
 /* ===== Mobile responsive for image import ===== */
 @media (max-width: 768px) {
@@ -1439,6 +1462,9 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   .img-review-batch input {
     width: 100%;
     min-width: 0;
+  }
+  .file-review-overview .card-title {
+    align-items: flex-start !important;
   }
 }
 
