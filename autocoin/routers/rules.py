@@ -51,3 +51,9 @@ def delete_rule(rule_id: int, repo: SQLiteRepository = Depends(get_repo)):
     if not repo.delete_classification_rule(rule_id):
         raise HTTPException(status_code=404, detail="分类规则不存在")
     return {"ok": True}
+
+
+@router.post("/reclassify")
+def reclassify(repo: SQLiteRepository = Depends(get_repo)):
+    result = repo.reclassify_all_transactions()
+    return result

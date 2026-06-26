@@ -346,9 +346,38 @@ class SQLiteRepository(DataRepository):
         ).scalar()
         inserted = after_count - before_count
         duplicates = len(items) - inserted
-        return inserted, duplicates
+                return inserted, duplicates
 
-    # ---------- Statistics ----------
+            def reclassify_all_transactions(self) -> dict:
+                """Re-apply classification rules to all non-deleted transactions, returning changed records."""
+                txs = (
+                    self._db.query(Transaction)
+                    .filter(
+                        Transaction.user_id == self._user_id,
+                        Transaction.is_deleted == 0,
+                    )
+                    .all()
+                )
+                changes = []
+                for tx in txs:
+                    original = _tx_to_dict(tx)
+                    applied = self._apply_classification_rules(original.copy())
+                    cat_changed = original.get("category") != applied.get("category")
+                    rem_changed = original.get("remark") != applied.get("remark")
+                    if cat_changed or rem_changed:
+                        tx.category = applied.get("category", tx.category)
+                        tx.remark = applied.get("remark", tx.remark)
+                        tx.updated_at = datetime.utcnow()
+                        changes.append({
+                            "id": tx.id,
+                            "before": original,
+                            "after": applied,
+                        })
+                if changes:
+                    self._db.commit()
+                return {"modified_count": len(changes), "changes": changes}
+
+            # ---------- Statistics ----------
 
     def get_summary_stats(
         self, start_date: Optional[str] = None, end_date: Optional[str] = None

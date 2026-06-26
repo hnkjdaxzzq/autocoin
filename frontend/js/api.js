@@ -244,7 +244,8 @@ const API = {
         body: JSON.stringify(body),
       }),
     delete: (id) => apiFetch(`/rules/${id}`, { method: "DELETE" }),
-  },
+        reclassify: () => apiFetch("/rules/reclassify", { method: "POST" }),
+      },
   stats: {
     summary: (params) =>
       apiFetch("/statistics/summary?" + new URLSearchParams(

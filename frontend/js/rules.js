@@ -6,6 +6,7 @@ const RulesPage = {
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">分类规则</h1>
+        <button class="btn btn-ghost" id="rules-reclassify">立即重新分类</button>
         <button class="btn btn-ghost" id="rules-reset">新建规则</button>
       </div>
 
@@ -78,6 +79,7 @@ const RulesPage = {
     container.querySelector("#rules-reset").addEventListener("click", () => RulesPage._resetForm(container));
     container.querySelector("#rule-cancel").addEventListener("click", () => RulesPage._resetForm(container));
     container.querySelector("#rule-form").addEventListener("submit", (e) => RulesPage._submit(container, e));
+    container.querySelector("#rules-reclassify").addEventListener("click", () => RulesPage._reclassify(container));
 
     RulesPage._resetForm(container);
     RulesPage._load(container);
@@ -184,7 +186,106 @@ const RulesPage = {
         });
       });
     } catch (err) {
-      listEl.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${err.message}</div>`;
-    }
-  },
-};
+          listEl.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${err.message}</div>`;
+        }
+      },
+
+      _reclassify(container) {
+        RulesPage._showConfirm("是否对现有数据执行重新分类").then((confirmed) => {
+          if (!confirmed) return;
+          API.rules.reclassify().then((result) => {
+            RulesPage._showResult(container, result);
+          }).catch((err) => {
+            alert("重新分类失败: " + err.message);
+          });
+        });
+      },
+
+      _showConfirm(message) {
+        return new Promise((resolve) => {
+          const existing = document.querySelector(".modal-overlay");
+          if (existing) existing.remove();
+          const overlay = document.createElement("div");
+          overlay.className = "modal-overlay";
+          overlay.innerHTML = `
+            <div class="modal-dialog modal-dialog-sm">
+              <div class="modal-body">${message}</div>
+              <div class="modal-buttons">
+                <button class="btn btn-primary" id="modal-yes">是</button>
+                <button class="btn btn-ghost" id="modal-cancel">取消</button>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(overlay);
+          overlay.querySelector("#modal-yes").addEventListener("click", () => {
+            resolve(true);
+            overlay.remove();
+          });
+          overlay.querySelector("#modal-cancel").addEventListener("click", () => {
+            resolve(false);
+            overlay.remove();
+          });
+        });
+      },
+
+      _showResult(container, data) {
+        const { modified_count, changes } = data;
+        const existing = document.querySelector(".modal-overlay");
+        if (existing) existing.remove();
+        const overlay = document.createElement("div");
+        overlay.className = "modal-overlay";
+        let rowsHtml = "";
+        if (changes && changes.length > 0) {
+          rowsHtml = changes.map(change => {
+            const b = change.before || {};
+            const a = change.after || {};
+            return `
+              <tr>
+                <td>${b.transaction_time || ""}</td>
+                <td>${b.counterparty || ""}</td>
+                <td>${b.product || ""}</td>
+                <td>${(b.amount != null ? b.amount : "")}</td>
+                <td>${b.category || ""}</td>
+                <td>${a.category || ""}</td>
+                <td>${b.remark || ""}</td>
+                <td>${a.remark || ""}</td>
+              </tr>
+            `;
+          }).join("");
+        } else {
+          rowsHtml = `<tr><td colspan="8">没有数据被修改</td></tr>`;
+        }
+        overlay.innerHTML = `
+          <div class="modal-dialog modal-dialog-lg">
+            <div class="modal-title">已修改${modified_count}条数据</div>
+            <div class="modal-table-wrap">
+              <table class="modal-table">
+                <thead>
+                  <tr>
+                    <th>交易时间</th>
+                    <th>交易对方</th>
+                    <th>商品</th>
+                    <th>金额</th>
+                    <th>原分类</th>
+                    <th>新分类</th>
+                    <th>原备注</th>
+                    <th>新备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-buttons">
+              <button class="btn btn-primary" id="modal-close">关闭</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.querySelector("#modal-close").addEventListener("click", () => {
+          overlay.remove();
+        });
+      },
+
+    };
