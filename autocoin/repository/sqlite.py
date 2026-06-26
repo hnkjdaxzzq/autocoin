@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Optional
 
 from sqlalchemy import func, or_
@@ -82,35 +83,44 @@ class SQLiteRepository(DataRepository):
             .all()
         )
 
-    def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
-        def contains(value: str, expected: str) -> bool:
-            if not expected:
+            def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
+        def matches(value: str, pattern: str) -> bool:
+            if not pattern:
                 return True
-            return expected.lower() in (value or "").lower()
-
-        return all(
-            [
-                contains(item.get("counterparty", ""), rule.match_counterparty),
-                contains(item.get("product", ""), rule.match_product),
-                contains(item.get("payment_method", ""), rule.match_payment_method),
-                contains(item.get("transaction_type", ""), rule.match_transaction_type),
-            ]
-        )
+            try:
+                return re.search(pattern, value or "", re.IGNORECASE) is not None
+            except re.error:
+                return False
+        return all([
+            matches(item.get("counterparty", ""), rule.match_counterparty),
+            matches(item.get("product", ""), rule.match_product),
+            matches(item.get("payment_method", ""), rule.match_payment_method),
+            matches(item.get("transaction_type", ""), rule.match_transaction_type),
+        ])
 
     def _apply_classification_rules(self, item: dict) -> dict:
         normalized = dict(item)
         for rule in self._list_active_rules():
             if not self._matches_rule(normalized, rule):
                 continue
-            if rule.category and not normalized.get("category"):
+            # 保存原始分类
+            orig_category = normalized.get("category")
+            # 无条件应用规则分类（如果规则提供了分类）
+            if rule.category:
                 normalized["category"] = rule.category
+            # 构建备注
+            remark_parts = []
             if rule.remark:
+                remark_parts.append(rule.remark)
+            else:
                 existing_remark = (normalized.get("remark") or "").strip()
-                normalized["remark"] = (
-                    existing_remark
-                    if existing_remark
-                    else rule.remark
-                )
+                if existing_remark:
+                    remark_parts.append(existing_remark)
+            # 如果分类被覆盖且原分类非空，添加追溯信息
+            if rule.category and orig_category and orig_category != rule.category:
+                remark_parts.append(f"原数据分类为：{orig_category}")
+            if remark_parts:
+                normalized["remark"] = "；".join(remark_parts)
             break
         return normalized
 
