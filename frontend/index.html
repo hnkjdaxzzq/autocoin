@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Autocoin · 个人记账</title>
-  <link rel="stylesheet" href="/css/styles.css?v=19">
+  <link rel="stylesheet" href="/css/styles.css?v=20">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -18,21 +18,21 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         概览
       </a>
+      <a href="#/stats" data-route="/stats">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        统计分析
+      </a>
       <a href="#/transactions" data-route="/transactions">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        账单
-      </a>
-      <a href="#/import" data-route="/import">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        导入
+        账单明细
       </a>
       <a href="#/rules" data-route="/rules">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
         规则
       </a>
-      <a href="#/stats" data-route="/stats">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        统计
+      <a href="#/import" data-route="/import">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导入
       </a>
       <a href="#/data-management" data-route="/data-management">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
@@ -69,7 +69,7 @@
         <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
         <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
       </svg>
-      <span>账单</span>
+      <span>账单明细</span>
     </a>
     <a href="#/import" data-route="/import">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -83,7 +83,7 @@
         <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
         <line x1="6" y1="20" x2="6" y2="14"/>
       </svg>
-      <span>统计</span>
+      <span>统计分析</span>
     </a>
     <a href="javascript:void(0)" id="bottom-bar-me">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -94,15 +94,15 @@
     </a>
   </nav>
 
-  <script src="/js/api.js?v=19"></script>
-  <script src="/js/charts.js?v=19"></script>
-  <script src="/js/auth.js?v=19"></script>
-  <script src="/js/dashboard.js?v=19"></script>
-  <script src="/js/transactions.js?v=19"></script>
-  <script src="/js/data-management.js?v=19"></script>
-  <script src="/js/import.js?v=19"></script>
-  <script src="/js/rules.js?v=19"></script>
-  <script src="/js/stats.js?v=19"></script>
-  <script src="/js/app.js?v=19"></script>
+  <script src="/js/api.js?v=20"></script>
+  <script src="/js/charts.js?v=20"></script>
+  <script src="/js/auth.js?v=20"></script>
+  <script src="/js/dashboard.js?v=20"></script>
+  <script src="/js/transactions.js?v=20"></script>
+  <script src="/js/data-management.js?v=20"></script>
+  <script src="/js/import.js?v=20"></script>
+  <script src="/js/rules.js?v=20"></script>
+  <script src="/js/stats.js?v=20"></script>
+  <script src="/js/app.js?v=20"></script>
 </body>
 </html>

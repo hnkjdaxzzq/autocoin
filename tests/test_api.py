@@ -513,3 +513,65 @@ class TestImageImport:
         data = confirm_resp.json()
         assert data["imported_rows"] == 1
         assert data["duplicate_rows"] == 1
+
+
+class TestDataManagementBackup:
+    def test_backup_validate_and_restore(self, client, auth_headers):
+        create_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2026-06-01 08:00:00",
+            "direction": "expense",
+            "amount": 88.8,
+            "category": "备份测试",
+            "counterparty": "原始记录",
+        })
+        assert create_resp.status_code == 201
+
+        export_resp = client.get("/api/v1/data-management/backup/export", headers=auth_headers)
+        assert export_resp.status_code == 200
+        assert "text/csv" in export_resp.headers["content-type"]
+        backup_bytes = export_resp.content
+        assert b"autocoin_full_database_backup" in backup_bytes
+        assert b"transactions" in backup_bytes
+        assert b"users" in backup_bytes
+
+        validate_resp = client.post(
+            "/api/v1/data-management/backup/validate",
+            headers=auth_headers,
+            files={"file": ("backup.csv", backup_bytes, "text/csv")},
+        )
+        assert validate_resp.status_code == 200
+        assert validate_resp.json()["valid"] is True
+        assert validate_resp.json()["tables"]["transactions"] >= 1
+
+        extra_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2026-06-02 08:00:00",
+            "direction": "expense",
+            "amount": 99.9,
+            "category": "备份测试",
+            "counterparty": "还原前新增",
+        })
+        assert extra_resp.status_code == 201
+
+        restore_resp = client.post(
+            "/api/v1/data-management/backup/restore",
+            headers=auth_headers,
+            files={"file": ("backup.csv", backup_bytes, "text/csv")},
+        )
+        assert restore_resp.status_code == 200
+        assert restore_resp.json()["message"] == "数据还原成功"
+
+        list_resp = client.get(
+            "/api/v1/transactions?search=%E8%BF%98%E5%8E%9F%E5%89%8D%E6%96%B0%E5%A2%9E",
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200
+        assert list_resp.json()["total"] == 0
+
+    def test_validate_rejects_invalid_backup(self, client, auth_headers):
+        resp = client.post(
+            "/api/v1/data-management/backup/validate",
+            headers=auth_headers,
+            files={"file": ("bad.csv", b"not,a,backup\n1,2,3\n", "text/csv")},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "数据错误，请检查上传的备份数据。"

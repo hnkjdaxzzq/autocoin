@@ -36,23 +36,15 @@ const DataManagement = {
           </label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <div class="export-dropdown" id="export-dropdown">
-            <button class="export-dropdown-btn" id="btn-export-toggle" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              导出
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:12px;height:12px"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div class="export-dropdown-menu" id="export-menu">
-              <button type="button" id="btn-export-csv">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                导出为 CSV
-              </button>
-              <button type="button" id="btn-export-excel">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                导出为 Excel
-              </button>
-            </div>
-          </div>
+          <input type="file" id="backup-file-input" accept=".csv,text/csv" style="display:none">
+          <button class="btn btn-ghost" id="btn-import-backup" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导入备份数据
+          </button>
+          <button class="btn btn-primary" id="btn-backup-all" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            备份所有数据
+          </button>
         </div>
       </div>
 
@@ -103,7 +95,7 @@ const DataManagement = {
     DataManagement._state.page = 1;
     DataManagement._state.selectedIds = new Set();
     DataManagement._bindFilters(container);
-    DataManagement._bindExport(container);
+    DataManagement._bindBackup(container);
     DataManagement._bindBatch(container);
     DataManagement._loadCategories(container);
     DataManagement._load(container);
@@ -133,27 +125,153 @@ const DataManagement = {
     } catch (_) {}
   },
 
-  _bindExport(container) {
-    // Dropdown toggle
-    const toggleBtn = container.querySelector("#btn-export-toggle");
-    const menu = container.querySelector("#export-menu");
-    toggleBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      menu.classList.toggle("show");
-    });
-    document.addEventListener("click", () => menu.classList.remove("show"));
-    menu.addEventListener("click", (e) => e.stopPropagation());
+  _bindBackup(container) {
+    const backupBtn = container.querySelector("#btn-backup-all");
+    const importBtn = container.querySelector("#btn-import-backup");
+    const fileInput = container.querySelector("#backup-file-input");
 
-    container.querySelector("#btn-export-csv").addEventListener("click", () => {
-      menu.classList.remove("show");
-      const filters = DataManagement._getFilters(container);
-      API.transactions.exportCsv(filters).catch(e => alert("导出失败: " + e.message));
+    backupBtn.addEventListener("click", async () => {
+      const confirmed = await DataManagement._showConfirm({
+        title: "备份所有数据",
+        body: "确认后将生成当前数据库所有表和数据的备份文件，并由浏览器下载。",
+        confirmText: "确认备份",
+      });
+      if (!confirmed) return;
+
+      backupBtn.disabled = true;
+      try {
+        await API.dataManagement.exportBackup();
+      } catch (e) {
+        DataManagement._showToast("备份失败: " + e.message);
+      } finally {
+        backupBtn.disabled = false;
+      }
     });
-    container.querySelector("#btn-export-excel").addEventListener("click", () => {
-      menu.classList.remove("show");
-      const filters = DataManagement._getFilters(container);
-      API.transactions.exportExcel(filters).catch(e => alert("导出失败: " + e.message));
+
+    importBtn.addEventListener("click", () => {
+      fileInput.value = "";
+      fileInput.click();
     });
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      importBtn.disabled = true;
+      try {
+        await API.dataManagement.validateBackup(file);
+        const confirmed = await DataManagement._showRestoreConfirm();
+        if (!confirmed) return;
+
+        await API.dataManagement.restoreBackup(file);
+        DataManagement._state.selectedIds.clear();
+        DataManagement._showToast("数据还原成功");
+        DataManagement._loadCategories(container);
+        DataManagement._load(container);
+      } catch (e) {
+        DataManagement._showToast(e.message || "数据错误，请检查上传的备份数据。");
+      } finally {
+        importBtn.disabled = false;
+        fileInput.value = "";
+      }
+    });
+  },
+
+  _showConfirm({ title, body, confirmText = "确认", cancelText = "取消" }) {
+    return new Promise((resolve) => {
+      DataManagement._removeModal();
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      overlay.innerHTML = `
+        <div class="modal-dialog modal-dialog-sm">
+          <div class="modal-title">${title}</div>
+          <div class="modal-body">${body}</div>
+          <div class="modal-buttons">
+            <button class="btn btn-primary" id="modal-confirm">${confirmText}</button>
+            <button class="btn btn-ghost" id="modal-cancel">${cancelText}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.querySelector("#modal-confirm").addEventListener("click", () => {
+        DataManagement._removeModal();
+        resolve(true);
+      });
+      overlay.querySelector("#modal-cancel").addEventListener("click", () => {
+        DataManagement._removeModal();
+        resolve(false);
+      });
+    });
+  },
+
+  _showRestoreConfirm() {
+    return new Promise((resolve) => {
+      DataManagement._removeModal();
+      let code = DataManagement._randomCode();
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      overlay.innerHTML = `
+        <div class="modal-dialog modal-dialog-sm">
+          <div class="modal-title">导入备份数据</div>
+          <div class="modal-body">
+            <p>该操作将清空当前所有数据并还原导入的数据，请谨慎操作，如需继续请输入以下数字：</p>
+            <div class="backup-confirm-code" id="backup-confirm-code">${code}</div>
+            <input class="backup-confirm-input" id="backup-confirm-input" type="text" inputmode="numeric" autocomplete="off" maxlength="5">
+          </div>
+          <div class="modal-buttons">
+            <button class="btn btn-danger" id="modal-confirm">确认还原</button>
+            <button class="btn btn-ghost" id="modal-cancel">取消</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const input = overlay.querySelector("#backup-confirm-input");
+      input.focus();
+
+      overlay.querySelector("#modal-confirm").addEventListener("click", () => {
+        if (input.value.trim() !== code) {
+          DataManagement._showToast("输入有误，请重新输入");
+          code = DataManagement._randomCode();
+          overlay.querySelector("#backup-confirm-code").textContent = code;
+          input.value = "";
+          input.focus();
+          return;
+        }
+        DataManagement._removeModal();
+        resolve(true);
+      });
+      overlay.querySelector("#modal-cancel").addEventListener("click", () => {
+        DataManagement._removeModal();
+        resolve(false);
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") overlay.querySelector("#modal-confirm").click();
+        if (e.key === "Escape") overlay.querySelector("#modal-cancel").click();
+      });
+    });
+  },
+
+  _removeModal() {
+    const existing = document.querySelector(".modal-overlay");
+    if (existing) existing.remove();
+  },
+
+  _randomCode() {
+    return String(Math.floor(10000 + Math.random() * 90000));
+  },
+
+  _showToast(message) {
+    const existing = document.querySelector(".toast-message");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.className = "toast-message";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add("show"), 10);
+    setTimeout(() => {
+      toast.classList.remove("show");
+      setTimeout(() => toast.remove(), 200);
+    }, 2600);
   },
 
   _bindBatch(container) {

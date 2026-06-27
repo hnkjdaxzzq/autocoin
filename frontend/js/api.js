@@ -127,6 +127,59 @@ const API = {
       });
     },
   },
+  dataManagement: {
+    exportBackup: () => {
+      const token = Auth.getToken();
+      return fetch(API_BASE + "/data-management/backup/export", {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      }).then(res => {
+        if (!res.ok) throw new Error("备份失败");
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : "autocoin_full_backup.csv";
+        return res.blob().then(blob => ({ blob, filename }));
+      }).then(({ blob, filename }) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    },
+    validateBackup: async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = Auth.getToken();
+      const res = await fetch(API_BASE + "/data-management/backup/validate", {
+        method: "POST",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        let msg = "数据错误，请检查上传的备份数据。";
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    restoreBackup: async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = Auth.getToken();
+      const res = await fetch(API_BASE + "/data-management/backup/restore", {
+        method: "POST",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        let msg = "数据还原失败";
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+  },
   imports: {
     upload: async (formData) => {
       const headers = {};
