@@ -462,7 +462,7 @@ const DataManagement = {
               </td>
               <td>
                 <button class="btn btn-danger btn-sm btn-delete" data-id="${tx.id}"
-                  style="padding:2px 8px;font-size:12px">删除</button>
+                  style="padding:2px 8px;font-size:12px">硬删除</button>
               </td>
             </tr>`).join("")}
         </tbody>
@@ -500,12 +500,12 @@ const DataManagement = {
     // Bind delete buttons
     wrap.querySelectorAll(".btn-delete").forEach(btn => {
       btn.addEventListener("click", async () => {
-        if (!confirm("确认删除这条账单记录？")) return;
+        if (!confirm("确认物理删除这条账单记录？此操作不可恢复。")) return;
         try {
-          await API.transactions.delete(parseInt(btn.dataset.id));
+          await API.transactions.batchHardDelete([parseInt(btn.dataset.id)]);
           DataManagement._load(container);
         } catch (err) {
-          alert("删除失败: " + err.message);
+          alert("物理删除失败: " + err.message);
         }
       });
     });
