@@ -1142,6 +1142,31 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   display: block;
 }
 
+/* ===== Quick Import Shortcuts ===== */
+.quick-import {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.quick-import-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.quick-import-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 64px;
+}
+.quick-import-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ===== Image Preview Thumbnails ===== */
 .img-preview-list {
   display: flex;

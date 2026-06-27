@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from autocoin.app import create_app
-from tests.test_parsers import _make_alipay_csv
+from tests.test_parsers import _make_alipay_csv, _make_cmb_securities_xls
 
 
 @pytest.fixture(scope="module")
@@ -336,6 +336,112 @@ class TestFileImportPreview:
         assert preview["total_rows"] == 1
         assert preview["items"][0]["amount"] == 0.0
         assert preview["items"][0]["direction"] == "neutral"
+
+    def test_preview_cmb_securities_file_import(self, client, auth_headers):
+        cmb_bytes = _make_cmb_securities_xls([
+            [
+                "人民币", "天添利", "20260526", "1.0000", "0", "71.85",
+                "72.85", "135195.08", "0", "2400962142", "产品红利发放",
+                "0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "0.00",
+                "880013", "980413128609", "",
+            ],
+            [
+                "人民币", "中国平安", "20260521", "54.5000", "500", "-27255.27",
+                "1.00", "2700", "443753", "3200013111", "证券买入",
+                "0.00", "3.52", "0.93", "0.55", "0.00", "0.27", "0.00",
+                "601318", "A682083458", "",
+            ],
+        ])
+        preview_resp = client.post("/api/v1/imports/cmb-securities/preview", headers=auth_headers, files={
+            "file": ("zszq.xls", cmb_bytes, "application/vnd.ms-excel"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["source"] == "招商证券"
+        assert preview["total_rows"] == 1
+        assert preview["total_income"] == 71.85
+        assert preview["items"][0]["transaction_time"] == "2026-05-26 00:00:00"
+        assert preview["items"][0]["product"] == "天添利"
+        assert preview["items"][0]["category"] == "股息收入"
+        assert preview["items"][0]["source_order_id"] == "2400962142"
+
+    def test_preview_ibkr_file_import(self, client, auth_headers, monkeypatch):
+        from autocoin.parsers.ibkr import IbkrParser
+
+        monkeypatch.setattr(IbkrParser, "_fetch_cny_rate", lambda self, currency: {
+            "USD": 7.2,
+            "HKD": 0.92,
+        }[currency])
+
+        ibkr_bytes = (
+            "\ufeffStatement,Data,BrokerName,Interactive Brokers LLC\n"
+            "股息,Header,货币,日期,描述,金额\n"
+            "股息,Data,USD,2026-01-09,MO 现金红利,53\n"
+            "股息,Data,总数,,,53\n"
+            "代扣税,Header,货币,日期,描述,金额,代码\n"
+            "代扣税,Data,USD,2026-01-09,MO US 税收,-15.9,\n"
+            "利息,Header,货币,日期,描述,金额\n"
+            "利息,Data,HKD,2026-05-05,HKD 贷方利息,29.58\n"
+        ).encode("utf-8-sig")
+        preview_resp = client.post("/api/v1/imports/ibkr/preview", headers=auth_headers, files={
+            "file": ("ibkr.csv", ibkr_bytes, "text/csv"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["source"] == "盈透IBKR"
+        assert preview["total_rows"] == 3
+        assert preview["total_income"] == 408.81
+        assert preview["total_expense"] == 114.48
+        assert preview["items"][0]["transaction_time"] == "2026-01-09 00:00:00"
+        assert preview["items"][0]["product"] == "MO 现金红利"
+        assert preview["items"][0]["amount"] == 381.6
+        assert preview["items"][0]["remark"] == "股息 USD 53"
+        assert preview["items"][1]["direction"] == "expense"
+        assert preview["items"][1]["remark"] == "代扣税 USD -15.9"
+
+    def test_preview_moomoo_file_import(self, client, auth_headers, monkeypatch):
+        from autocoin.parsers.moomoo import MoomooParser
+        from tests.test_parsers import _make_moomoo_text
+
+        monkeypatch.setattr(MoomooParser, "_fetch_cny_rate", lambda self, currency: {"USD": 7.2}[currency])
+        monkeypatch.setattr(MoomooParser, "_extract_text", lambda self, file_bytes: _make_moomoo_text())
+
+        preview_resp = client.post("/api/v1/imports/moomoo/preview", headers=auth_headers, files={
+            "file": ("moomoo.pdf", b"%PDF-1.4", "application/pdf"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["source"] == "MOOMOO"
+        assert preview["total_rows"] == 4
+        assert preview["total_income"] == 4274.81
+        assert preview["total_expense"] == 161.14
+        assert preview["items"][0]["transaction_time"] == "2026-05-06 15:20:29"
+        assert preview["items"][0]["product"].startswith("現金分紅 J P MORGAN")
+        assert preview["items"][0]["amount"] == 1611.43
+        assert preview["items"][0]["remark"] == "現金分紅 +223.81 USD"
+        assert preview["items"][1]["direction"] == "expense"
+        assert preview["items"][1]["remark"] == "非美國居民預扣稅 -22.38 USD"
+
+    def test_preview_hsbc_pulse_file_import(self, client, auth_headers, monkeypatch):
+        from autocoin.parsers.hsbc_pulse import HsbcPulseParser
+        from tests.test_parsers import _make_hsbc_pulse_text
+
+        monkeypatch.setattr(HsbcPulseParser, "_extract_text", lambda self, file_bytes: _make_hsbc_pulse_text())
+
+        preview_resp = client.post("/api/v1/imports/hsbc-pulse/preview", headers=auth_headers, files={
+            "file": ("pulse.pdf", b"%PDF-1.7", "application/pdf"),
+        })
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()
+        assert preview["source"] == "汇丰PULSE"
+        assert preview["total_rows"] == 3
+        assert preview["total_income"] == 406.85
+        assert preview["total_expense"] == 9.8
+        assert preview["items"][0]["transaction_time"] == "2026-04-24 00:00:00"
+        assert preview["items"][0]["product"] == "MEITUAN CHN CN APPLE PAY-MOBILE:7045 退款"
+        assert preview["items"][0]["direction"] == "income"
+        assert preview["items"][0]["remark"] == "记账日期 2026-04-27 退款"
+        assert preview["items"][1]["payment_method"] == "Pulse双币卡"
 
 
 class TestImageImport:

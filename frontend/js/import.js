@@ -36,8 +36,31 @@ const Import = {
           <div style="margin-top:16px">
             <label class="btn btn-ghost" for="file-input" style="cursor:pointer">选择文件</label>
             <input type="file" id="file-input" accept=".csv,.xlsx" style="display:none" multiple>
+            <input type="file" id="cmb-securities-file-input" accept=".xls" style="display:none" multiple>
+            <input type="file" id="ibkr-file-input" accept=".csv" style="display:none" multiple>
+            <input type="file" id="moomoo-file-input" accept=".pdf" style="display:none" multiple>
+            <input type="file" id="hsbc-pulse-file-input" accept=".pdf" style="display:none" multiple>
           </div>
         </div>
+
+        <!-- Quick import shortcuts -->
+        <div class="quick-import">
+          <div class="quick-import-row">
+            <span class="quick-import-label">银行账单</span>
+            <div class="quick-import-btns">
+              <button class="btn btn-ghost quick-import-btn" data-source="hsbc-pulse">导入汇丰PULSE信用卡文件</button>
+            </div>
+          </div>
+          <div class="quick-import-row">
+            <span class="quick-import-label">券商账单</span>
+            <div class="quick-import-btns">
+              <button class="btn btn-ghost quick-import-btn" data-source="ibkr">导入盈透文件</button>
+              <button class="btn btn-ghost quick-import-btn" data-source="moomoo">导入moomoo文件</button>
+              <button class="btn btn-ghost quick-import-btn" data-source="cmb-securities">导入招商证券文件</button>
+            </div>
+          </div>
+        </div>
+
         <div id="import-results"></div>
       </div>
 
@@ -79,6 +102,7 @@ const Import = {
 
     Import._bindTabs(container);
     Import._bindDrop(container);
+    Import._bindQuickImport(container);
     Import._bindImageDrop(container);
     Import._loadHistory(container);
     Import._loadImageQuota(container);
@@ -120,21 +144,82 @@ const Import = {
     });
   },
 
-  async _uploadFiles(files, container) {
+  /* ---- Quick import shortcuts ---- */
+  _bindQuickImport(container) {
+    const labels = {
+      "hsbc-pulse": "汇丰PULSE信用卡",
+      "ibkr": "盈透",
+      "moomoo": "moomoo",
+      "cmb-securities": "招商证券",
+    };
+    const cmbInput = container.querySelector("#cmb-securities-file-input");
+    const ibkrInput = container.querySelector("#ibkr-file-input");
+    const moomooInput = container.querySelector("#moomoo-file-input");
+    const hsbcPulseInput = container.querySelector("#hsbc-pulse-file-input");
+    container.querySelectorAll(".quick-import-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const source = btn.dataset.source;
+        if (source === "hsbc-pulse") {
+          hsbcPulseInput.click();
+          return;
+        }
+        if (source === "ibkr") {
+          ibkrInput.click();
+          return;
+        }
+        if (source === "moomoo") {
+          moomooInput.click();
+          return;
+        }
+        if (source === "cmb-securities") {
+          cmbInput.click();
+          return;
+        }
+        const label = labels[source] || source;
+        alert(`「导入${label}文件」功能即将上线`);
+      });
+    });
+    cmbInput.addEventListener("change", () => {
+      Import._uploadFiles(Array.from(cmbInput.files), container, { source: "cmb-securities", label: "招商证券" });
+      cmbInput.value = "";
+    });
+    ibkrInput.addEventListener("change", () => {
+      Import._uploadFiles(Array.from(ibkrInput.files), container, { source: "ibkr", label: "盈透" });
+      ibkrInput.value = "";
+    });
+    moomooInput.addEventListener("change", () => {
+      Import._uploadFiles(Array.from(moomooInput.files), container, { source: "moomoo", label: "moomoo" });
+      moomooInput.value = "";
+    });
+    hsbcPulseInput.addEventListener("change", () => {
+      Import._uploadFiles(Array.from(hsbcPulseInput.files), container, { source: "hsbc-pulse", label: "汇丰PULSE信用卡" });
+      hsbcPulseInput.value = "";
+    });
+  },
+
+  async _uploadFiles(files, container, options = {}) {
     const resultsEl = container.querySelector("#import-results");
     if (!files.length) return;
+    const sourceLabel = options.label ? `${options.label} ` : "";
     resultsEl.innerHTML = `
       <div class="card import-result">
-        <div class="card-title">正在解析 ${files.length} 份账单…</div>
+        <div class="card-title">正在解析 ${files.length} 份${sourceLabel}账单…</div>
         <div style="color:var(--text-muted);font-size:13px">会逐份生成预览卡片，你可以分别检查后再统一确认导入。</div>
       </div>
     `;
 
+    const previewApis = {
+      "cmb-securities": API.imports.previewCmbSecurities,
+      "hsbc-pulse": API.imports.previewHsbcPulse,
+      "ibkr": API.imports.previewIbkr,
+      "moomoo": API.imports.previewMoomoo,
+    };
+    const previewApi = previewApis[options.source] || API.imports.preview;
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
       try {
-        const preview = await API.imports.preview(formData);
+        const preview = await previewApi(formData);
         Import._filePreviews.push(Import._createFilePreviewState(preview));
       } catch (err) {
         Import._fileImportNotices.unshift({

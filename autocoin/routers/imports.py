@@ -85,6 +85,98 @@ async def preview_bill(
     return result
 
 
+@router.post("/cmb-securities/preview", response_model=FileImportPreviewResponse)
+async def preview_cmb_securities_bill(
+    file: UploadFile = File(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext != "xls":
+        raise HTTPException(status_code=400, detail="Only .xls CMB Securities files are supported")
+
+    file_bytes = await file.read()
+    service = ImportService(repo)
+    try:
+        result = service.preview_file(file_bytes, file.filename, source="cmb-securities")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+    return result
+
+
+@router.post("/ibkr/preview", response_model=FileImportPreviewResponse)
+async def preview_ibkr_bill(
+    file: UploadFile = File(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext != "csv":
+        raise HTTPException(status_code=400, detail="Only .csv IBKR files are supported")
+
+    file_bytes = await file.read()
+    service = ImportService(repo)
+    try:
+        result = service.preview_file(file_bytes, file.filename, source="ibkr")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+    return result
+
+
+@router.post("/moomoo/preview", response_model=FileImportPreviewResponse)
+async def preview_moomoo_bill(
+    file: UploadFile = File(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext != "pdf":
+        raise HTTPException(status_code=400, detail="Only .pdf MOOMOO files are supported")
+
+    file_bytes = await file.read()
+    service = ImportService(repo)
+    try:
+        result = service.preview_file(file_bytes, file.filename, source="moomoo")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+    return result
+
+
+@router.post("/hsbc-pulse/preview", response_model=FileImportPreviewResponse)
+async def preview_hsbc_pulse_bill(
+    file: UploadFile = File(...),
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext != "pdf":
+        raise HTTPException(status_code=400, detail="Only .pdf HSBC PULSE files are supported")
+
+    file_bytes = await file.read()
+    service = ImportService(repo)
+    try:
+        result = service.preview_file(file_bytes, file.filename, source="hsbc-pulse")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+    return result
+
+
 @router.post("/confirm", response_model=ImportBatchResponse)
 async def confirm_bill_import(
     filename: str = Body(...),

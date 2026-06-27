@@ -5,6 +5,10 @@ from typing import Optional
 
 from autocoin.parsers.alipay import AlipayParser
 from autocoin.parsers.base import BillParser
+from autocoin.parsers.cmb_securities import CmbSecuritiesParser
+from autocoin.parsers.hsbc_pulse import HsbcPulseParser
+from autocoin.parsers.ibkr import IbkrParser
+from autocoin.parsers.moomoo import MoomooParser
 from autocoin.parsers.wechat import WeChatParser
 from autocoin.repository.base import DataRepository
 
@@ -14,12 +18,26 @@ class ImportService:
     def __init__(self, repo: DataRepository):
         self._repo = repo
         self._parsers: list[BillParser] = [AlipayParser(), WeChatParser()]
+        self._source_parsers: dict[str, BillParser] = {
+            "cmb-securities": CmbSecuritiesParser(),
+            "hsbc-pulse": HsbcPulseParser(),
+            "ibkr": IbkrParser(),
+            "moomoo": MoomooParser(),
+        }
 
     def detect_parser(self, filename: str, file_bytes: bytes) -> BillParser:
         for parser in self._parsers:
             if parser.can_parse(filename, file_bytes):
                 return parser
         raise ValueError(f"No parser available for file: {filename}")
+
+    def get_source_parser(self, source: str, filename: str, file_bytes: bytes) -> BillParser:
+        parser = self._source_parsers.get(source)
+        if not parser:
+            raise ValueError(f"No parser available for source: {source}")
+        if not parser.can_parse(filename, file_bytes):
+            raise ValueError(f"File does not look like a {parser.SOURCE_NAME} bill: {filename}")
+        return parser
 
     def import_file(self, file_bytes: bytes, filename: str) -> dict:
         parser = self.detect_parser(filename, file_bytes)
@@ -90,8 +108,12 @@ class ImportService:
         normalized["amount"] = round(float(amount or 0), 2)
         return normalized
 
-    def preview_file(self, file_bytes: bytes, filename: str) -> dict:
-        parser = self.detect_parser(filename, file_bytes)
+    def preview_file(self, file_bytes: bytes, filename: str, source: Optional[str] = None) -> dict:
+        parser = (
+            self.get_source_parser(source, filename, file_bytes)
+            if source
+            else self.detect_parser(filename, file_bytes)
+        )
         parsed = parser.parse(file_bytes)
         raw_dicts = [self._normalize_preview_item(dataclasses.asdict(p)) for p in parsed]
         duplicates = self._repo.check_import_duplicates(raw_dicts)

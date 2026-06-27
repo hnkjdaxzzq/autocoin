@@ -170,6 +170,102 @@ const API = {
       }
       return res.json();
     },
+    previewCmbSecurities: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(API_BASE + "/imports/cmb-securities/preview", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    previewIbkr: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(API_BASE + "/imports/ibkr/preview", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    previewMoomoo: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(API_BASE + "/imports/moomoo/preview", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    previewHsbcPulse: async (formData) => {
+      const headers = {};
+      const token = Auth.getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(API_BASE + "/imports/hsbc-pulse/preview", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        Auth.clear();
+        window.location.hash = "#/login";
+        throw new Error("请先登录");
+      }
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
     confirmFileImport: (filename, source, transactions) =>
       apiFetch("/imports/confirm", {
         method: "POST",
