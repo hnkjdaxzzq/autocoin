@@ -3,17 +3,16 @@ const Dashboard = {
   render(container) {
     const now = new Date();
     const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const monthStart = `${year}-${month}-01`;
-    const monthEnd = `${year}-${month}-${String(new Date(year, now.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+    const yearStart = `${year}-01-01`;
+    const today = Dashboard._formatLocalDate(now);
 
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">概览</h1>
         <div style="display:flex;gap:10px;align-items:center">
           <label style="font-size:13px;color:var(--text-muted)">
-            <input type="date" id="dash-start" value="${monthStart}"> —
-            <input type="date" id="dash-end" value="${monthEnd}">
+            <input type="date" id="dash-start" value="${yearStart}"> —
+            <input type="date" id="dash-end" value="${today}">
           </label>
           <button class="btn btn-primary btn-sm" id="dash-refresh" style="padding:6px 14px">刷新</button>
         </div>
@@ -45,6 +44,10 @@ const Dashboard = {
     });
 
     Dashboard._loadAll(container);
+  },
+
+  _formatLocalDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
   },
 
   async _loadAll(container) {

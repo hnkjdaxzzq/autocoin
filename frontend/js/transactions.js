@@ -9,14 +9,33 @@ const Transactions = {
     selectedIds: new Set(),
     categories: [],
   },
+  _sourceOptions: [
+    "alipay",
+    "wechat",
+    "manual",
+    "image",
+    "招商证券",
+    "盈透IBKR",
+    "MOOMOO",
+    "汇丰PULSE",
+  ],
 
   render(container) {
     const now = new Date();
-    const defaultTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}T${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+    const today = Transactions._formatLocalDate(now);
+    const yearStart = `${now.getFullYear()}-01-01`;
+    const defaultTime = `${today}T${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
     container.innerHTML = `
       <div class="page-header">
-        <h1 class="page-title">账单明细</h1>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+          <h1 class="page-title">账单明细</h1>
+          <label class="title-date-filter">日期范围
+            <input type="date" id="f-start" value="${yearStart}" placeholder="开始日期">
+            <span style="color:#94a3b8">—</span>
+            <input type="date" id="f-end" value="${today}" placeholder="结束日期">
+          </label>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="export-dropdown" id="export-dropdown">
             <button class="export-dropdown-btn" id="btn-export-toggle" type="button">
@@ -92,11 +111,6 @@ const Transactions = {
       </div>
 
       <div class="filter-bar">
-        <label>日期范围
-          <input type="date" id="f-start" placeholder="开始日期">
-          <span style="color:#94a3b8">—</span>
-          <input type="date" id="f-end" placeholder="结束日期">
-        </label>
         <label>方向
           <select id="f-direction">
             <option value="">全部</option>
@@ -108,10 +122,12 @@ const Transactions = {
         <label>来源
           <select id="f-source">
             <option value="">全部</option>
-            <option value="alipay">支付宝</option>
-            <option value="wechat">微信支付</option>
-            <option value="manual">手动录入</option>
-            <option value="image">图片导入</option>
+            ${Transactions._sourceOptions.map(source => `<option value="${source}">${source}</option>`).join("")}
+          </select>
+        </label>
+        <label>分类
+          <select id="f-category">
+            <option value="">全部</option>
           </select>
         </label>
         <input type="text" id="f-search" placeholder="搜索对方/商品/备注…" style="min-width:180px">
@@ -154,12 +170,19 @@ const Transactions = {
       // Populate datalist and batch dropdown
       const dl = container.querySelector("#category-datalist");
       const batchSel = container.querySelector("#batch-category");
+      const filterSel = container.querySelector("#f-category");
       if (dl) {
         dl.innerHTML = Transactions._state.categories.map(c => `<option value="${c}">`).join("");
       }
       if (batchSel) {
         batchSel.innerHTML = '<option value="">批量改分类…</option>' +
           Transactions._state.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+      }
+      if (filterSel) {
+        const current = filterSel.value;
+        filterSel.innerHTML = '<option value="">全部</option>' +
+          Transactions._state.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+        filterSel.value = current;
       }
     } catch (_) {}
   },
@@ -231,10 +254,12 @@ const Transactions = {
     });
 
     container.querySelector("#btn-reset").addEventListener("click", () => {
-      container.querySelector("#f-start").value = "";
-      container.querySelector("#f-end").value = "";
+      const now = new Date();
+      container.querySelector("#f-start").value = `${now.getFullYear()}-01-01`;
+      container.querySelector("#f-end").value = Transactions._formatLocalDate(now);
       container.querySelector("#f-direction").value = "";
       container.querySelector("#f-source").value = "";
+      container.querySelector("#f-category").value = "";
       container.querySelector("#f-search").value = "";
       Transactions._state.page = 1;
       Transactions._load(container);
@@ -247,6 +272,10 @@ const Transactions = {
         Transactions._load(container);
       }
     });
+  },
+
+  _formatLocalDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
   },
 
   _bindManualForm(container) {
@@ -314,6 +343,7 @@ const Transactions = {
       end_date: container.querySelector("#f-end").value || "",
       direction: container.querySelector("#f-direction").value || "",
       source: container.querySelector("#f-source").value || "",
+      category: container.querySelector("#f-category").value || "",
       search: container.querySelector("#f-search").value || "",
     };
   },
@@ -389,7 +419,7 @@ const Transactions = {
             <tr data-id="${tx.id}">
               <td><input type="checkbox" class="tx-row-check" data-id="${tx.id}" ${Transactions._state.selectedIds.has(tx.id) ? "checked" : ""}></td>
               <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
-              <td>${tx.source === "alipay" ? "支付宝" : tx.source === "wechat" ? "微信" : tx.source === "image" ? "图片" : "手动"}</td>
+              <td>${tx.source || "—"}</td>
               <td>
                 <span class="editable category-cell" data-id="${tx.id}" title="点击编辑分类">
                   ${tx.category || tx.transaction_type || "—"}
@@ -478,12 +508,9 @@ const Transactions = {
 
   _renderPagination(data) {
     const { page, total_pages, total } = { page: data.page, total_pages: data.total_pages, total: data.total };
-    const pgs = [];
-    const start = Math.max(1, page - 2);
-    const end = Math.min(total_pages, page + 2);
-    for (let i = start; i <= end; i++) {
-      pgs.push(`<button class="page-btn ${i === page ? "active" : ""}" data-page="${i}">${i}</button>`);
-    }
+    const pgs = Transactions._paginationItems(page, total_pages).map(item => (
+      `<button class="page-btn ${item.page === page ? "active" : ""}" data-page="${item.page}">${item.label}</button>`
+    ));
     return `
       <div class="pagination">
         <span class="info">共 ${total} 条</span>
@@ -492,6 +519,29 @@ const Transactions = {
         <button class="page-btn" data-page="${page + 1}" ${page >= total_pages ? "disabled" : ""}>下一页 ›</button>
       </div>
     `;
+  },
+
+  _paginationItems(page, totalPages) {
+    if (totalPages <= 0) return [];
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, idx) => {
+        const pageNo = idx + 1;
+        return { page: pageNo, label: String(pageNo) };
+      });
+    }
+
+    const middle = [];
+    const start = Math.max(2, Math.min(page - 1, totalPages - 3));
+    const end = Math.min(totalPages - 1, start + 2);
+    for (let pageNo = start; pageNo <= end; pageNo++) {
+      middle.push({ page: pageNo, label: String(pageNo) });
+    }
+
+    return [
+      { page: 1, label: start > 2 ? "1..." : "1" },
+      ...middle,
+      { page: totalPages, label: end < totalPages - 1 ? `...${totalPages}` : String(totalPages) },
+    ];
   },
 
   _inlineEdit(cell, container) {

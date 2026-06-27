@@ -245,6 +245,31 @@ body {
   letter-spacing: -.01em;
 }
 
+.title-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.title-date-filter input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text);
+  transition: border-color .2s, box-shadow .2s;
+}
+
+.title-date-filter input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79,110,247,.1);
+}
+
 /* ===== Filter bar ===== */
 .filter-bar {
   background: var(--card-bg);
@@ -1001,7 +1026,16 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 
   .page-title {
     font-size: 18px;
+  }
+
+  .title-date-filter {
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .title-date-filter input {
+    flex: 1;
+    min-width: 0;
   }
 
   .summary-grid {
