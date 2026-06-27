@@ -83,7 +83,7 @@ class SQLiteRepository(DataRepository):
             .all()
         )
 
-            def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
+    def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
         def matches(value: str, pattern: str) -> bool:
             if not pattern:
                 return True
