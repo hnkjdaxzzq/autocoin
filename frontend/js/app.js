@@ -6,6 +6,7 @@ const ROUTES = {
   "/import":       Import,
   "/rules":        RulesPage,
   "/stats":        Stats,
+  "/data-management": DataManagement,
 };
 
 const PUBLIC_ROUTES = ["/login"];

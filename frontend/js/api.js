@@ -79,6 +79,12 @@ const API = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       }),
+    batchHardDelete: (ids) =>
+      apiFetch("/transactions/batch/hard-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      }),
     batchUpdate: (ids, data) =>
       apiFetch("/transactions/batch/update", {
         method: "POST",

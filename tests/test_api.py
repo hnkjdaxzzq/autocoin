@@ -158,6 +158,26 @@ class TestTransactions:
         assert resp.status_code == 200
         assert resp.json()["deleted"] == 2
 
+    def test_batch_hard_delete(self, client, auth_headers):
+        ids = []
+        for i in range(2):
+            r = client.post("/api/v1/transactions", headers=auth_headers, json={
+                "transaction_time": f"2025-02-1{i+1} 12:00:00",
+                "direction": "expense",
+                "amount": 20 + i,
+            })
+            ids.append(r.json()["id"])
+
+        resp = client.post("/api/v1/transactions/batch/hard-delete", headers=auth_headers, json={
+            "ids": ids,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 2
+
+        for tx_id in ids:
+            get_resp = client.get(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
+            assert get_resp.status_code == 404
+
     def test_export_csv(self, client, auth_headers):
         resp = client.get("/api/v1/transactions/export/csv", headers=auth_headers)
         assert resp.status_code == 200

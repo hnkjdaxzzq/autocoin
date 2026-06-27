@@ -199,6 +199,16 @@ def batch_delete(body: BatchDeleteRequest, repo: SQLiteRepository = Depends(get_
     return {"deleted": deleted, "total": len(body.ids)}
 
 
+@router.post("/batch/hard-delete")
+def batch_hard_delete(body: BatchDeleteRequest, repo: SQLiteRepository = Depends(get_repo)):
+    """Permanently delete multiple transactions."""
+    deleted = 0
+    for tid in body.ids:
+        if repo.hard_delete_transaction(tid):
+            deleted += 1
+    return {"deleted": deleted, "total": len(body.ids)}
+
+
 @router.post("/batch/update")
 def batch_update(body: BatchUpdateRequest, repo: SQLiteRepository = Depends(get_repo)):
     """Batch update category/direction for multiple transactions."""

@@ -282,6 +282,18 @@ class SQLiteRepository(DataRepository):
         self._db.commit()
         return True
 
+    def hard_delete_transaction(self, id: int) -> bool:
+        tx = self._db.query(Transaction).filter(
+            Transaction.id == id,
+            Transaction.user_id == self._user_id,
+            Transaction.is_deleted == 0,
+        ).first()
+        if not tx:
+            return False
+        self._db.delete(tx)
+        self._db.commit()
+        return True
+
     def list_categories(self) -> list[str]:
         """Return distinct non-empty categories for this user."""
         rows = (
