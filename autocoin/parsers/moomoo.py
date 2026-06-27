@@ -217,7 +217,7 @@ class MoomooParser(BillParser):
                 check=True,
             )
         except FileNotFoundError as exc:
-            raise ValueError("解析 MOOMOO PDF 需要安装 pdftotext") from exc
+            raise ValueError("解析 MOOMOO PDF 需要在后端运行环境中安装 pdftotext（Debian/Ubuntu 包名：poppler-utils）") from exc
         except subprocess.CalledProcessError as exc:
             detail = exc.stderr.decode("utf-8", errors="replace").strip()
             raise ValueError(f"解析 MOOMOO PDF 失败: {detail or exc}") from exc

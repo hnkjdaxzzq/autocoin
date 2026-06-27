@@ -5,6 +5,11 @@ WORKDIR /app
 # Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Required by PDF import parsers that call `pdftotext`.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy dependency specification first for layer caching
 COPY pyproject.toml ./
 
