@@ -73,13 +73,14 @@ const Stats = {
       </div>
     `;
 
-    // Set default category date range to current year
-    container.querySelector("#cat-start").value = `${year}-01-01`;
-    container.querySelector("#cat-end").value = `${year}-12-31`;
+    Stats._setCategoryDateRange(container, year);
 
     // Bind events
     container.querySelector("#btn-load-year").addEventListener("click", () => {
+      const selectedYear = parseInt(container.querySelector("#stat-year").value);
+      Stats._setCategoryDateRange(container, selectedYear);
       Stats._loadYear(container);
+      Stats._loadCategory(container);
     });
     container.querySelector("#btn-cat").addEventListener("click", () => {
       Stats._loadCategory(container);
@@ -88,6 +89,11 @@ const Stats = {
     // Initial load
     Stats._loadYear(container);
     Stats._loadCategory(container);
+  },
+
+  _setCategoryDateRange(container, year) {
+    container.querySelector("#cat-start").value = `${year}-01-01`;
+    container.querySelector("#cat-end").value = `${year}-12-31`;
   },
 
   async _loadYear(container) {

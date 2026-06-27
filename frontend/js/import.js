@@ -6,6 +6,11 @@ const Import = {
   _filePreviews: [],
   _fileImportNotices: [],
   _nextFilePreviewId: 1,
+  _history: {
+    batches: [],
+    page: 1,
+    pageSize: 10,
+  },
 
   render(container) {
     container.innerHTML = `
@@ -1144,51 +1149,114 @@ const Import = {
     const el = container.querySelector("#import-history");
     try {
       const batches = await API.imports.list();
-      if (!batches.length) {
-        el.innerHTML = `<div class="empty">暂无导入记录</div>`;
-        return;
-      }
-
-      const sourceLabel = (s) => {
-        if (s === "alipay") return "支付宝";
-        if (s === "wechat") return "微信支付";
-        if (s === "image") return "图片识别";
-        return s;
-      };
-
-      el.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>文件名</th>
-              <th>来源</th>
-              <th>导入时间</th>
-              <th>总行数</th>
-              <th>成功</th>
-              <th>重复</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${batches.map(b => `
-              <tr>
-                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.filename}">${b.filename}</td>
-                <td>${sourceLabel(b.source)}</td>
-                <td>${fmtDate(b.imported_at)}</td>
-                <td>${b.total_rows}</td>
-                <td style="color:#22c55e">${b.imported_rows}</td>
-                <td style="color:#f59e0b">${b.duplicate_rows}</td>
-                <td>
-                  <span class="badge ${b.status === 'success' ? 'badge-income' : b.status === 'failed' ? 'badge-expense' : 'badge-neutral'}">
-                    ${b.status}
-                  </span>
-                </td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-      `;
+      Import._history.batches = batches;
+      Import._history.page = 1;
+      Import._renderHistory(container);
     } catch (err) {
       showError(el, err.message);
     }
+  },
+
+  _renderHistory(container) {
+    const el = container.querySelector("#import-history");
+    const { batches, pageSize } = Import._history;
+    const totalPages = Math.max(1, Math.ceil(batches.length / pageSize));
+    const page = Math.min(Math.max(Import._history.page, 1), totalPages);
+    Import._history.page = page;
+
+    if (!batches.length) {
+      el.innerHTML = `<div class="empty">暂无导入记录</div>`;
+      return;
+    }
+
+    const sourceLabel = (s) => {
+      if (s === "alipay") return "支付宝";
+      if (s === "wechat") return "微信支付";
+      if (s === "image") return "图片识别";
+      return s;
+    };
+    const startIdx = (page - 1) * pageSize;
+    const pageBatches = batches.slice(startIdx, startIdx + pageSize);
+
+    el.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>文件名</th>
+            <th>来源</th>
+            <th>导入时间</th>
+            <th>总行数</th>
+            <th>成功</th>
+            <th>重复</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pageBatches.map(b => `
+            <tr>
+              <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.filename}">${b.filename}</td>
+              <td>${sourceLabel(b.source)}</td>
+              <td>${fmtDate(b.imported_at)}</td>
+              <td>${b.total_rows}</td>
+              <td style="color:#22c55e">${b.imported_rows}</td>
+              <td style="color:#f59e0b">${b.duplicate_rows}</td>
+              <td>
+                <span class="badge ${b.status === 'success' ? 'badge-income' : b.status === 'failed' ? 'badge-expense' : 'badge-neutral'}">
+                  ${b.status}
+                </span>
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      ${Import._renderHistoryPagination(batches.length, page, totalPages)}
+    `;
+
+    el.querySelectorAll(".page-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const nextPage = parseInt(btn.dataset.page);
+        if (nextPage && nextPage !== Import._history.page) {
+          Import._history.page = nextPage;
+          Import._renderHistory(container);
+        }
+      });
+    });
+  },
+
+  _renderHistoryPagination(total, page, totalPages) {
+    const pageItems = Import._paginationItems(page, totalPages).map(item => (
+      `<button class="page-btn ${item.page === page ? "active" : ""}" data-page="${item.page}">${item.label}</button>`
+    ));
+
+    return `
+      <div class="pagination">
+        <span class="info">共 ${total} 条，每页最多 10 条</span>
+        <button class="page-btn" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹ 上一页</button>
+        ${pageItems.join("")}
+        <button class="page-btn" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>下一页 ›</button>
+      </div>
+    `;
+  },
+
+  _paginationItems(page, totalPages) {
+    if (totalPages <= 0) return [];
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, idx) => {
+        const pageNo = idx + 1;
+        return { page: pageNo, label: String(pageNo) };
+      });
+    }
+
+    const middle = [];
+    const start = Math.max(2, Math.min(page - 1, totalPages - 3));
+    const end = Math.min(totalPages - 1, start + 2);
+    for (let pageNo = start; pageNo <= end; pageNo++) {
+      middle.push({ page: pageNo, label: String(pageNo) });
+    }
+
+    return [
+      { page: 1, label: start > 2 ? "1..." : "1" },
+      ...middle,
+      { page: totalPages, label: end < totalPages - 1 ? `...${totalPages}` : String(totalPages) },
+    ];
   },
 };
