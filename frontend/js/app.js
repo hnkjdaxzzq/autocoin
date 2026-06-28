@@ -3,6 +3,7 @@ const ROUTES = {
   "/login":        AuthPage,
   "/dashboard":    Dashboard,
   "/transactions": Transactions,
+  "/broker-income-analysis": BrokerIncomeAnalysis,
   "/import":       Import,
   "/rules":        RulesPage,
   "/stats":        Stats,

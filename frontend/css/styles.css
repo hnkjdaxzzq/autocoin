@@ -310,6 +310,84 @@ body {
   gap: 6px;
 }
 
+.multi-source-filter {
+  position: relative;
+}
+
+.multi-source-toggle {
+  min-width: 210px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.multi-source-toggle span {
+  color: var(--text-muted);
+}
+
+.multi-source-toggle strong {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.multi-source-toggle svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.multi-source-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 220px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: none;
+}
+
+.multi-source-menu.show {
+  display: block;
+}
+
+.multi-source-option {
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.multi-source-option:hover {
+  background: var(--table-hover-bg);
+}
+
+.multi-source-option input {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
 /* ===== Table ===== */
 .table-wrap {
   background: var(--card-bg);

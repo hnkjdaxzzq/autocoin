@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import re
 from typing import Optional
 
@@ -9,6 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from autocoin.models.classification_rule import ClassificationRule
 from autocoin.models.transaction import Transaction
 from autocoin.models.import_batch import ImportBatch
+from autocoin.models.user_preference import UserPreference
 from autocoin.repository.base import DataRepository
 
 
@@ -64,6 +66,25 @@ def _rule_to_dict(rule: ClassificationRule) -> dict:
         "created_at": rule.created_at.isoformat() if rule.created_at else None,
         "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
     }
+
+
+def _normalize_sources(source) -> list[str]:
+    if not source:
+        return []
+    if isinstance(source, str):
+        return [s.strip() for s in source.split(",") if s.strip()]
+    return [str(s).strip() for s in source if str(s).strip()]
+
+
+def _apply_source_filter(q, source):
+    sources = _normalize_sources(source)
+    if "__none__" in sources:
+        return q.filter(Transaction.source == "__none__")
+    if len(sources) == 1:
+        return q.filter(Transaction.source == sources[0])
+    if len(sources) > 1:
+        return q.filter(Transaction.source.in_(sources))
+    return q
 
 
 class SQLiteRepository(DataRepository):
@@ -149,8 +170,7 @@ class SQLiteRepository(DataRepository):
             q = q.filter(Transaction.direction == direction)
         if category:
             q = q.filter(Transaction.category.ilike(f"%{category}%"))
-        if source:
-            q = q.filter(Transaction.source == source)
+        q = _apply_source_filter(q, source)
         if search:
             q = q.filter(
                 or_(
@@ -294,9 +314,9 @@ class SQLiteRepository(DataRepository):
         self._db.commit()
         return True
 
-    def list_categories(self) -> list[str]:
+    def list_categories(self, source=None) -> list[str]:
         """Return distinct non-empty categories for this user."""
-        rows = (
+        q = (
             self._db.query(Transaction.category)
             .filter(
                 Transaction.user_id == self._user_id,
@@ -304,10 +324,9 @@ class SQLiteRepository(DataRepository):
                 Transaction.category != None,
                 Transaction.category != "",
             )
-            .distinct()
-            .order_by(Transaction.category)
-            .all()
         )
+        q = _apply_source_filter(q, source)
+        rows = q.distinct().order_by(Transaction.category).all()
         return [r[0] for r in rows]
 
     def bulk_insert_transactions(
@@ -392,7 +411,10 @@ class SQLiteRepository(DataRepository):
     # ---------- Statistics ----------
 
     def get_summary_stats(
-        self, start_date: Optional[str] = None, end_date: Optional[str] = None
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source=None,
     ) -> dict:
         q = self._db.query(Transaction).filter(
             Transaction.is_deleted == 0,
@@ -403,6 +425,7 @@ class SQLiteRepository(DataRepository):
         if end_date:
             end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
             q = q.filter(Transaction.transaction_time <= end_dt)
+        q = _apply_source_filter(q, source)
 
         income_q = q.filter(Transaction.direction == "income")
         expense_q = q.filter(Transaction.direction == "expense")
@@ -422,7 +445,21 @@ class SQLiteRepository(DataRepository):
             "expense_count": expense_count,
         }
 
-    def get_monthly_stats(self, year: int) -> list[dict]:
+    def get_monthly_stats(self, year: int, source=None) -> list[dict]:
+        sources = _normalize_sources(source)
+        filters = [
+            Transaction.is_deleted == 0,
+            Transaction.user_id == self._user_id,
+            func.strftime("%Y", Transaction.transaction_time) == str(year),
+            Transaction.direction.in_(["income", "expense"]),
+        ]
+        if "__none__" in sources:
+            filters.append(Transaction.source == "__none__")
+        elif len(sources) == 1:
+            filters.append(Transaction.source == sources[0])
+        elif len(sources) > 1:
+            filters.append(Transaction.source.in_(sources))
+
         rows = (
             self._db.query(
                 func.strftime("%m", Transaction.transaction_time).label("month"),
@@ -430,12 +467,7 @@ class SQLiteRepository(DataRepository):
                 func.sum(Transaction.amount).label("total"),
                 func.count(Transaction.id).label("cnt"),
             )
-            .filter(
-                Transaction.is_deleted == 0,
-                Transaction.user_id == self._user_id,
-                func.strftime("%Y", Transaction.transaction_time) == str(year),
-                Transaction.direction.in_(["income", "expense"]),
-            )
+            .filter(*filters)
             .group_by("month", Transaction.direction)
             .all()
         )
@@ -457,11 +489,54 @@ class SQLiteRepository(DataRepository):
 
         return list(month_data.values())
 
+    def get_monthly_stats_range(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source=None,
+    ) -> list[dict]:
+        q = (
+            self._db.query(
+                func.strftime("%Y-%m", Transaction.transaction_time).label("month_key"),
+                Transaction.direction,
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("cnt"),
+            )
+            .filter(
+                Transaction.is_deleted == 0,
+                Transaction.user_id == self._user_id,
+                Transaction.direction.in_(["income", "expense"]),
+            )
+        )
+        if start_date:
+            q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+            q = q.filter(Transaction.transaction_time <= end_dt)
+        q = _apply_source_filter(q, source)
+
+        rows = q.group_by("month_key", Transaction.direction).order_by("month_key").all()
+        month_data: dict[str, dict] = {}
+        for row in rows:
+            key = row.month_key
+            if key not in month_data:
+                month_data[key] = {"month": key, "income": 0.0, "expense": 0.0, "count": 0}
+            if row.direction == "income":
+                month_data[key]["income"] = round(row.total or 0, 2)
+            else:
+                month_data[key]["expense"] = round(row.total or 0, 2)
+            month_data[key]["count"] += row.cnt
+
+        for item in month_data.values():
+            item["net"] = round(item["income"] - item["expense"], 2)
+        return list(month_data.values())
+
     def get_category_stats(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         direction: str = "expense",
+        source=None,
     ) -> list[dict]:
         q = (
             self._db.query(
@@ -480,6 +555,7 @@ class SQLiteRepository(DataRepository):
         if end_date:
             end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
             q = q.filter(Transaction.transaction_time <= end_dt)
+        q = _apply_source_filter(q, source)
 
         rows = q.group_by(Transaction.category).order_by(func.sum(Transaction.amount).desc()).all()
 
@@ -494,20 +570,29 @@ class SQLiteRepository(DataRepository):
             for r in rows
         ]
 
-    def get_daily_stats(self, year: int, month: int) -> list[dict]:
+    def get_daily_stats(self, year: int, month: int, source=None) -> list[dict]:
         month_str = f"{year}-{month:02d}"
+        sources = _normalize_sources(source)
+        filters = [
+            Transaction.is_deleted == 0,
+            Transaction.user_id == self._user_id,
+            func.strftime("%Y-%m", Transaction.transaction_time) == month_str,
+            Transaction.direction.in_(["income", "expense"]),
+        ]
+        if "__none__" in sources:
+            filters.append(Transaction.source == "__none__")
+        elif len(sources) == 1:
+            filters.append(Transaction.source == sources[0])
+        elif len(sources) > 1:
+            filters.append(Transaction.source.in_(sources))
+
         rows = (
             self._db.query(
                 func.strftime("%Y-%m-%d", Transaction.transaction_time).label("day"),
                 Transaction.direction,
                 func.sum(Transaction.amount).label("total"),
             )
-            .filter(
-                Transaction.is_deleted == 0,
-                Transaction.user_id == self._user_id,
-                func.strftime("%Y-%m", Transaction.transaction_time) == month_str,
-                Transaction.direction.in_(["income", "expense"]),
-            )
+            .filter(*filters)
             .group_by("day", Transaction.direction)
             .all()
         )
@@ -523,6 +608,48 @@ class SQLiteRepository(DataRepository):
                 day_data[d]["expense"] = round(row.total, 2)
 
         return sorted(day_data.values(), key=lambda x: x["date"])
+
+    # ---------- User Preferences ----------
+
+    def get_user_preference(self, key: str, default=None):
+        pref = (
+            self._db.query(UserPreference)
+            .filter(
+                UserPreference.user_id == self._user_id,
+                UserPreference.key == key,
+            )
+            .first()
+        )
+        if not pref:
+            return default
+        try:
+            return json.loads(pref.value)
+        except json.JSONDecodeError:
+            return default
+
+    def set_user_preference(self, key: str, value) -> None:
+        encoded = json.dumps(value, ensure_ascii=False)
+        pref = (
+            self._db.query(UserPreference)
+            .filter(
+                UserPreference.user_id == self._user_id,
+                UserPreference.key == key,
+            )
+            .first()
+        )
+        if pref:
+            pref.value = encoded
+            pref.updated_at = datetime.utcnow()
+        else:
+            pref = UserPreference(
+                user_id=self._user_id,
+                key=key,
+                value=encoded,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            self._db.add(pref)
+        self._db.commit()
 
     # ---------- Import Batches ----------
 

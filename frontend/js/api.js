@@ -413,4 +413,25 @@ const API = {
       )),
     daily: (year, month) => apiFetch(`/statistics/daily?year=${year}&month=${month}`),
   },
+  brokerIncomeAnalysis: {
+    getSources: () => apiFetch("/broker-income-analysis/preferences/sources"),
+    saveSources: (sources) =>
+      apiFetch("/broker-income-analysis/preferences/sources", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources }),
+      }),
+    list: (params) =>
+      apiFetch("/broker-income-analysis/transactions?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+    categories: (params) =>
+      apiFetch("/broker-income-analysis/categories?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+    monthly: (params) =>
+      apiFetch("/broker-income-analysis/monthly?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+  },
 };

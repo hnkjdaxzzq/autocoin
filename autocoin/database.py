@@ -28,6 +28,7 @@ def init_db():
         import_batch,
         transaction,
         user,
+        user_preference,
     )
     Base.metadata.create_all(bind=engine)
 
