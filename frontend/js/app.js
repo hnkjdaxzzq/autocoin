@@ -8,6 +8,7 @@ const ROUTES = {
   "/rules":        RulesPage,
   "/stats":        Stats,
   "/data-management": DataManagement,
+  "/ai-analysis": AiClassification,
 };
 
 const PUBLIC_ROUTES = ["/login"];

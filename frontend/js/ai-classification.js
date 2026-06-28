@@ -1,0 +1,444 @@
+/* ===== AiClassification page - AI自动分类 ===== */
+const AiClassification = {
+  _state: {
+    previewPage: 1,
+    previewPageSize: 50,
+    allResults: [],
+    filteredResults: [],
+  },
+
+  render(container) {
+    container.innerHTML = `
+      <div class="page-header">
+        <h1 class="page-title">AI分析</h1>
+      </div>
+
+      <div class="card" style="max-width:640px;margin-bottom:24px">
+        <div class="card-title">AI 自动分类（实验性功能）</div>
+
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px">
+            使用AI将数据做以下分类
+          </label>
+          <input type="text" id="ai-categories" class="ai-input"
+            placeholder="美食, 交通, 旅游, 购物, 住房, 娱乐"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                   font-size:14px;background:var(--input-bg);color:var(--text)">
+          <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
+            请填写希望将数据分类的[全部]类型，不同分类之间用英文或中文逗号隔开，AI将把所有数据识别为以上分类，不保留你没有填写的类型。
+          </div>
+        </div>
+
+        <button id="btn-ai-classify" class="btn btn-primary" style="width:100%;padding:10px;font-size:15px;font-weight:600">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               style="width:16px;height:16px;vertical-align:middle;margin-right:6px">
+            <path d="M12 2a4 4 0 014 4c0 2-2 4-4 6-2-2-4-4-4-6a4 4 0 014-4z"/>
+            <path d="M5 22a7 7 0 0114 0"/>
+          </svg>
+          AI自动分类
+        </button>
+
+        <div style="margin-top:16px">
+          <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px">
+            API key
+          </label>
+          <input type="text" id="ai-api-key" class="ai-input"
+            placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                   font-size:14px;background:var(--input-bg);color:var(--text);
+                   font-family:monospace">
+          <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
+            请填写Deepseek官方网站里的API key
+          </div>
+        </div>
+      </div>
+
+      <div id="ai-status"></div>
+      <div id="ai-results"></div>
+    `;
+
+    AiClassification._bindEvents(container);
+  },
+
+  _bindEvents(container) {
+    const btn = container.querySelector("#btn-ai-classify");
+    btn.addEventListener("click", () => AiClassification._startClassification(container));
+
+    // Enter key to trigger
+    container.querySelector("#ai-categories").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") btn.click();
+    });
+    container.querySelector("#ai-api-key").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") btn.click();
+    });
+  },
+
+  async _startClassification(container) {
+    const categories = container.querySelector("#ai-categories").value.trim();
+    const apiKey = container.querySelector("#ai-api-key").value.trim();
+
+    if (!categories) {
+      AiClassification._showToast("请填写分类");
+      return;
+    }
+    if (!apiKey) {
+      AiClassification._showToast("请填写 API key");
+      return;
+    }
+
+    const btn = container.querySelector("#btn-ai-classify");
+    const statusEl = container.querySelector("#ai-status");
+
+    btn.disabled = true;
+    btn.textContent = "分类中...";
+
+    // Show progress UI
+    statusEl.innerHTML = `
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">分类进度</div>
+        <div id="ai-progress-status" style="font-size:14px;margin-bottom:12px;font-weight:500">
+          ⏳ 正在启动...
+        </div>
+        <div class="progress-track" id="ai-progress-track">
+          <div class="progress-fill" id="ai-progress-fill" style="width:0%"></div>
+        </div>
+        <div id="ai-progress-detail" style="font-size:12px;color:var(--text-muted);margin-top:8px">
+          准备中...
+        </div>
+      </div>`;
+
+    const progressStatus = document.getElementById("ai-progress-status");
+    const progressFill = document.getElementById("ai-progress-fill");
+    const progressDetail = document.getElementById("ai-progress-detail");
+
+    const updateProgress = (phase, message, pct) => {
+      if (progressStatus) progressStatus.textContent = message;
+      if (progressFill) progressFill.style.width = Math.min(pct, 100) + "%";
+    };
+
+    // Use fetch directly for SSE streaming
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 660000);
+
+    try {
+      const token = Auth.getToken();
+      const response = await fetch("/api/v1/ai-classification/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          api_key: apiKey,
+          categories: categories,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let msg = `HTTP ${response.status}`;
+        try { const j = await response.json(); msg = j.detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+
+      // Read SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completeData = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";  // keep incomplete chunk
+
+        for (const rawEvent of events) {
+          if (!rawEvent.trim()) continue;
+
+          const lines = rawEvent.split("\n");
+          let eventType = "";
+          let dataStr = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              dataStr = line.slice(6);
+            }
+          }
+
+          if (!dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+
+            if (eventType === "progress") {
+              const phase = data.phase;
+              let pct = 0;
+              let msg = "";
+
+              if (phase === "reading") {
+                pct = 5;
+                msg = "⏳ 正在读取数据库中的交易数据...";
+              } else if (phase === "preparing") {
+                pct = 10;
+                msg = `📦 共 ${data.total} 条数据，分为 ${data.total_batches} 批处理`;
+              } else if (phase === "classifying") {
+                const done = data.completed_batches || 0;
+                const totalB = data.total_batches || 1;
+                pct = 10 + Math.round((done / totalB) * 80);
+                const classified = data.classified_so_far || 0;
+                const total = data.total || 0;
+                msg = `🤖 正在分类... ${done}/${totalB} 批，已处理 ${classified}/${total} 条`;
+                if (data.failed_batches > 0) {
+                  msg += ` (${data.failed_batches} 批失败，已保留原分类)`;
+                }
+              } else if (phase === "timeout") {
+                pct = 95;
+                msg = `⏰ 处理超时，已部分完成 ${data.classified_so_far || 0}/${data.total} 条`;
+              }
+
+              updateProgress(phase, msg, pct);
+              if (progressDetail) progressDetail.textContent = msg.replace(/^[^\s]+\s/, "");
+
+            } else if (eventType === "complete") {
+              completeData = data;
+              // Fill the bar
+              updateProgress("complete", "✅ 分类完成", 100);
+              if (progressDetail) progressDetail.textContent = `共处理 ${data.classified} 条，${data.changed} 条分类发生变更`;
+            }
+          } catch (e) {
+            // ignore parse errors for incomplete chunks
+          }
+        }
+      }
+
+      if (!completeData || !completeData.results || completeData.results.length === 0) {
+        statusEl.innerHTML = `<div class="empty">没有需要分类的数据</div>`;
+        return;
+      }
+
+      // Store results
+      AiClassification._state.allResults = completeData.results;
+
+      // Update status to summary
+      statusEl.innerHTML = `
+        <div class="summary-grid" style="margin-top:16px">
+          <div class="summary-card">
+            <div class="label">总数据</div>
+            <div class="value" style="color:var(--primary);font-size:22px">${completeData.total}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">已分类</div>
+            <div class="value" style="color:var(--income);font-size:22px">${completeData.classified}</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">分类改变</div>
+            <div class="value" style="color:var(--expense);font-size:22px">${completeData.changed}</div>
+          </div>
+        </div>
+      `;
+
+      AiClassification._showResultModal(container);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === "AbortError";
+      statusEl.innerHTML = `
+        <div style="padding:16px;background:rgba(239,68,68,.08);border-radius:var(--radius-sm);
+                    color:var(--expense);font-weight:500">
+          ❌ ${isTimeout ? "请求超时：DeepSeek API 响应超过11分钟，请检查网络或 API key 是否正确" : "分类失败: " + err.message}
+        </div>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               style="width:16px;height:16px;vertical-align:middle;margin-right:6px">
+            <path d="M12 2a4 4 0 014 4c0 2-2 4-4 6-2-2-4-4-4-6a4 4 0 014-4z"/>
+            <path d="M5 22a7 7 0 0114 0"/>
+          </svg>
+          AI自动分类`;
+    }
+  },
+
+  _showResultModal(container) {
+    AiClassification._removeModal();
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+
+    const allResults = AiClassification._state.allResults;
+    const pageSize = AiClassification._state.previewPageSize;
+    let currentPage = 1;
+
+    const renderTable = (page) => {
+      const results = allResults;
+      const totalPages = Math.ceil(results.length / pageSize) || 1;
+      const start = (page - 1) * pageSize;
+      const end = Math.min(start + pageSize, results.length);
+      const pageItems = results.slice(start, end);
+
+      return `
+        <div class="modal-table-wrap">
+          <table class="modal-table">
+            <thead>
+              <tr>
+                <th style="width:50px">#</th>
+                <th style="width:140px">交易时间</th>
+                <th>交易对方</th>
+                <th>商品</th>
+                <th style="width:100px">旧分类</th>
+                <th style="width:100px">新分类</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pageItems.map((item, i) => `
+                <tr>
+                  <td style="color:var(--text-muted)">${start + i + 1}</td>
+                  <td>${AiClassification._fmtDate(item.transaction_time)}</td>
+                  <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                      title="${item.counterparty || ""}">${item.counterparty || "—"}</td>
+                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                      title="${item.product || ""}">${item.product || "—"}</td>
+                  <td><span class="badge badge-old">${item.old_category || "—"}</span></td>
+                  <td><span class="badge badge-new">${item.new_category || "—"}</span></td>
+                </tr>
+              `).join("")}
+              ${pageItems.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">没有数据</td></tr>' : ""}
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" style="margin-top:8px">
+          <span class="info">共 ${results.length} 条</span>
+          <button class="page-btn" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹ 上一页</button>
+          <span style="font-size:13px;color:var(--text-muted);padding:0 8px">第${page}/${totalPages}页</span>
+          <button class="page-btn" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>下一页 ›</button>
+        </div>
+      `;
+    };
+
+    const goToPage = (page) => {
+      const totalPages = Math.ceil(allResults.length / pageSize) || 1;
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      const body = overlay.querySelector(".modal-body-content");
+      if (body) {
+        body.innerHTML = renderTable(currentPage);
+        AiClassification._bindModalPagination(overlay, goToPage);
+      }
+    };
+
+    overlay.innerHTML = `
+      <div class="modal-dialog modal-dialog-lg" style="max-width:960px;width:90vw">
+        <div class="modal-title">AI分类结果预览</div>
+        <div class="modal-body">
+          <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">
+            共 <strong style="color:var(--text)">${allResults.length}</strong> 条数据，
+            其中 <strong style="color:var(--expense)">${allResults.filter(r => r.old_category !== r.new_category).length}</strong> 条分类发生变更。
+            每页展示 ${pageSize} 条。
+          </div>
+          <div class="modal-body-content">
+            ${renderTable(1)}
+          </div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-primary" id="modal-confirm-ai">确认修改</button>
+          <button class="btn btn-ghost" id="modal-cancel-ai">取消</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    AiClassification._bindModalPagination(overlay, goToPage);
+
+    overlay.querySelector("#modal-confirm-ai").addEventListener("click", async () => {
+      await AiClassification._confirmChanges(container, overlay);
+    });
+
+    overlay.querySelector("#modal-cancel-ai").addEventListener("click", () => {
+      AiClassification._removeModal();
+    });
+  },
+
+  _bindModalPagination(overlay, goToPage) {
+    overlay.querySelectorAll(".page-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const p = parseInt(e.currentTarget.dataset.page);
+        if (p && p > 0) {
+          goToPage(p);
+        }
+      });
+    });
+  },
+
+  async _confirmChanges(container, overlay) {
+    const btn = overlay.querySelector("#modal-confirm-ai");
+    btn.disabled = true;
+    btn.textContent = "提交中...";
+
+    try {
+      // Only write records where category actually changed
+      const changedResults = AiClassification._state.allResults.filter(
+        r => r.old_category !== r.new_category
+      );
+      const payload = changedResults.map(r => ({
+        id: r.id,
+        category: r.new_category,
+      }));
+
+      const res = await API.aiClassification.confirm({ results: payload });
+
+      AiClassification._removeModal();
+      AiClassification._showToast(`✅ 已更新 ${res.updated} / ${res.total} 条记录`);
+
+      // Update status
+      const statusEl = container.querySelector("#ai-status");
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div style="padding:16px;background:rgba(16,185,129,.08);border-radius:var(--radius-sm);
+                      color:var(--income);font-weight:500">
+            ✅ 已成功更新 ${res.updated} 条数据
+          </div>`;
+      }
+    } catch (err) {
+      AiClassification._showToast("❌ 更新失败: " + err.message);
+      btn.disabled = false;
+      btn.textContent = "确认修改";
+    }
+  },
+
+  _removeModal() {
+    const existing = document.querySelector(".modal-overlay");
+    if (existing) existing.remove();
+  },
+
+  _showToast(message) {
+    const existing = document.querySelector(".toast-message");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.className = "toast-message";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add("show"), 10);
+    setTimeout(() => {
+      toast.classList.remove("show");
+      setTimeout(() => toast.remove(), 200);
+    }, 2600);
+  },
+
+  _fmtDate(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso.substring(0, 10);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    } catch {
+      return iso ? iso.substring(0, 10) : "—";
+    }
+  },
+};

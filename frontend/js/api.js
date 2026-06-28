@@ -459,4 +459,19 @@ const API = {
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       )),
   },
+  aiClassification: {
+    classify: (body, signal) =>
+      apiFetch("/ai-classification/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      }),
+    confirm: (body) =>
+      apiFetch("/ai-classification/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  },
 };

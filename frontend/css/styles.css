@@ -451,6 +451,23 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 .badge-expense { background: #fef2f2; color: #dc2626; }
 .badge-neutral { background: #f1f5f9; color: #64748b; }
 
+.badge-old {
+  background: #fef2f2;
+  color: #dc2626;
+  text-decoration: line-through;
+}
+
+.badge-new {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.ai-input:focus {
+  outline: none;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(79,110,247,.1);
+}
+
 /* ===== Pagination ===== */
 .pagination {
   display: flex;
@@ -2027,4 +2044,20 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 
 .modal-table tr:last-child td {
   border-bottom: none;
+}
+
+/* ===== Progress bar for AI classification ===== */
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--gradient-primary);
+  border-radius: 4px;
+  transition: width 0.4s ease;
 }
