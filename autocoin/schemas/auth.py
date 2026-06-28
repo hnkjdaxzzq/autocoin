@@ -5,9 +5,13 @@ from pydantic import BaseModel, field_validator
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\u4e00-\u9fff]+$")
 
 
+INVITE_CODE = "tarikz"
+
+
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    invite_code: str
 
     @field_validator("username")
     @classmethod
@@ -30,6 +34,13 @@ class RegisterRequest(BaseModel):
             raise ValueError("密码需要包含至少一个字母")
         if not re.search(r"\d", v):
             raise ValueError("密码需要包含至少一个数字")
+        return v
+
+    @field_validator("invite_code")
+    @classmethod
+    def validate_invite_code(cls, v: str) -> str:
+        if v != INVITE_CODE:
+            raise ValueError("邀请码错误")
         return v
 
 

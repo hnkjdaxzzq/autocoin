@@ -56,6 +56,7 @@ def setup_demo_data():
     resp = requests.post(f"{API}/auth/register", json={
         "username": DEMO_USER,
         "password": DEMO_PASS,
+        "invite_code": "tarikz",
     })
     if resp.status_code == 409:
         # Already exists, log in

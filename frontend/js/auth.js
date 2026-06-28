@@ -55,10 +55,15 @@ const AuthPage = {
               <input type="password" id="reg-password" required maxlength="128" autocomplete="new-password" placeholder="请输入密码">
               <span class="field-hint" id="hint-password"></span>
             </label>
-            <label class="form-field" style="margin-bottom:20px">
+            <label class="form-field" style="margin-bottom:14px">
               <span class="form-label">确认密码</span>
               <input type="password" id="reg-password2" required autocomplete="new-password" placeholder="再次输入密码">
               <span class="field-hint" id="hint-password2"></span>
+            </label>
+            <label class="form-field" style="margin-bottom:20px">
+              <span class="form-label">邀请码</span>
+              <input type="text" id="reg-invite" required placeholder="请输入邀请码">
+              <span class="field-hint" id="hint-invite"></span>
             </label>
             <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;font-size:15px;justify-content:center">注册</button>
           </form>
@@ -172,6 +177,7 @@ const AuthPage = {
       const username = container.querySelector("#reg-username").value.trim();
       const pw1 = container.querySelector("#reg-password").value;
       const pw2 = container.querySelector("#reg-password2").value;
+      const invite = container.querySelector("#reg-invite").value.trim();
 
       // Client-side validation
       const uErr = AuthPage._checkUsername(username);
@@ -179,9 +185,10 @@ const AuthPage = {
       const pErr = AuthPage._checkPassword(pw1);
       if (pErr) { errEl.textContent = pErr; return; }
       if (pw1 !== pw2) { errEl.textContent = "两次密码输入不一致"; return; }
+      if (!invite) { errEl.textContent = "请输入邀请码"; return; }
 
       try {
-        const data = await API.auth.register({ username, password: pw1 });
+        const data = await API.auth.register({ username, password: pw1, invite_code: invite });
         Auth.setToken(data.access_token);
         Auth.setUsername(data.username);
         window.location.hash = "#/dashboard";

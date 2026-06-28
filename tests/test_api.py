@@ -29,6 +29,7 @@ def auth_headers(client):
     resp = client.post("/api/v1/auth/register", json={
         "username": "testuser",
         "password": "testpass123",
+        "invite_code": "tarikz",
     })
     assert resp.status_code == 201
     token = resp.json()["access_token"]
@@ -40,6 +41,7 @@ class TestAuth:
         resp = client.post("/api/v1/auth/register", json={
             "username": "newuser",
             "password": "password123",
+            "invite_code": "tarikz",
         })
         assert resp.status_code == 201
         data = resp.json()
@@ -51,11 +53,13 @@ class TestAuth:
         client.post("/api/v1/auth/register", json={
             "username": "dupuser",
             "password": "password123",
+            "invite_code": "tarikz",
         })
         # Duplicate
         resp = client.post("/api/v1/auth/register", json={
             "username": "dupuser",
             "password": "password456",
+            "invite_code": "tarikz",
         })
         assert resp.status_code == 409
 
@@ -64,6 +68,7 @@ class TestAuth:
         client.post("/api/v1/auth/register", json={
             "username": "loginuser",
             "password": "password123",
+            "invite_code": "tarikz",
         })
         resp = client.post("/api/v1/auth/login", json={
             "username": "loginuser",
