@@ -90,6 +90,69 @@ class TestAuth:
         assert resp.status_code == 200
         assert resp.json()["username"] == "testuser"
 
+    def test_change_password_success(self, client, auth_headers):
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "testpass123",
+            "new_password": "newpass4567",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "密码修改成功"
+        # Verify can login with new password
+        login_resp = client.post("/api/v1/auth/login", json={
+            "username": "testuser",
+            "password": "newpass4567",
+        })
+        assert login_resp.status_code == 200
+        # Change back for other tests
+        token = login_resp.json()["access_token"]
+        client.post("/api/v1/auth/change-password", headers={"Authorization": f"Bearer {token}"}, json={
+            "old_password": "newpass4567",
+            "new_password": "testpass123",
+        })
+
+    def test_change_password_wrong_old(self, client, auth_headers):
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "wrongpassword",
+            "new_password": "newpass4567",
+        })
+        assert resp.status_code == 400
+        assert "原密码错误" in resp.json()["detail"]
+
+    def test_change_password_same_password(self, client, auth_headers):
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "testpass123",
+            "new_password": "testpass123",
+        })
+        assert resp.status_code == 400
+        assert "新密码不能与原密码相同" in resp.json()["detail"]
+
+    def test_change_password_unauthorized(self, client):
+        resp = client.post("/api/v1/auth/change-password", json={
+            "old_password": "testpass123",
+            "new_password": "newpass4567",
+        })
+        assert resp.status_code == 401
+
+    def test_change_password_invalid_new(self, client, auth_headers):
+        # Too short
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "testpass123",
+            "new_password": "short",
+        })
+        assert resp.status_code == 422
+        # No letter
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "testpass123",
+            "new_password": "1234567890",
+        })
+        assert resp.status_code == 422
+        # No digit
+        resp = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
+            "old_password": "testpass123",
+            "new_password": "abcdefghijk",
+        })
+        assert resp.status_code == 422
+
 
 class TestTransactions:
     def test_create(self, client, auth_headers):

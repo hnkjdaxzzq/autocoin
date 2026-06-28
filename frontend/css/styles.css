@@ -917,31 +917,91 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  position: relative;
 }
 
-.sidebar-user #user-display {
+.sidebar-user-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-user-info #user-display {
   color: rgba(255,255,255,.7);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color .15s;
 }
 
-.btn-logout {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,.2);
-  color: rgba(255,255,255,.6);
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
+.sidebar-user-info:hover #user-display {
+  color: #fff;
+}
+
+.sidebar-user-chevron {
+  color: rgba(255,255,255,.4);
+  transition: transform .15s, color .15s;
   flex-shrink: 0;
 }
 
-.btn-logout:hover {
-  background: rgba(255,255,255,.1);
-  color: #fff;
+.sidebar-user-info:hover .sidebar-user-chevron {
+  color: rgba(255,255,255,.8);
+  transform: rotate(180deg);
+}
+
+/* ===== Sidebar User Dropdown Menu ===== */
+.sidebar-user-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  padding: 6px;
+  z-index: 500;
+  min-width: 160px;
+}
+
+.sidebar-user-menu.show {
+  display: block;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: background .15s;
+}
+
+.user-menu-item:hover {
+  background: var(--table-hover-bg);
+}
+
+.user-menu-logout {
+  color: var(--expense);
+}
+
+.user-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 .btn-theme {

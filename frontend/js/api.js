@@ -52,6 +52,12 @@ const API = {
         body: JSON.stringify(body),
       }),
     me: () => apiFetch("/auth/me"),
+    changePassword: (body) =>
+      apiFetch("/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
   },
   transactions: {
     list: (params) =>

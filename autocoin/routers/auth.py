@@ -11,6 +11,7 @@ from autocoin.auth import (
 from autocoin.database import get_db
 from autocoin.models.user import User
 from autocoin.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
     TokenResponse,
@@ -52,3 +53,18 @@ def me(user: User = Depends(get_current_user)):
         username=user.username,
         created_at=user.created_at.isoformat(),
     )
+
+
+@router.post("/change-password", status_code=200)
+def change_password(
+    body: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(body.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    if body.old_password == body.new_password:
+        raise HTTPException(status_code=400, detail="新密码不能与原密码相同")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"message": "密码修改成功"}

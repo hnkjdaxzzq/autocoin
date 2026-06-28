@@ -55,6 +55,31 @@ class TokenResponse(BaseModel):
     username: str
 
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+    @field_validator("old_password")
+    @classmethod
+    def validate_old_password(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("原密码不能为空")
+        if len(v) > 128:
+            raise ValueError("原密码过长")
+        return v
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("新密码至少8个字符")
+        if not re.search(r"[a-zA-Z]", v):
+            raise ValueError("新密码需要包含至少一个字母")
+        if not re.search(r"\d", v):
+            raise ValueError("新密码需要包含至少一个数字")
+        return v
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
