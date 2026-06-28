@@ -69,6 +69,9 @@ function toggleTheme() {
   const next = isDark ? "light" : "dark";
   html.setAttribute("data-theme", next);
   localStorage.setItem("autocoin_theme", next);
+  if (typeof Charts !== "undefined" && Charts.refreshAll) {
+    requestAnimationFrame(() => Charts.refreshAll());
+  }
 }
 
 function initTheme() {

@@ -30,11 +30,11 @@ const Transactions = {
       <div class="page-header">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <h1 class="page-title">账单明细</h1>
-          <label class="title-date-filter">日期范围
+          <div class="title-date-filter">
             <input type="date" id="f-start" value="${yearStart}" placeholder="开始日期">
             <span style="color:#94a3b8">—</span>
             <input type="date" id="f-end" value="${today}" placeholder="结束日期">
-          </label>
+          </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="export-dropdown" id="export-dropdown">
@@ -248,6 +248,13 @@ const Transactions = {
   },
 
   _bindFilters(container) {
+    container.querySelectorAll("#f-start, #f-end").forEach(input => {
+      input.addEventListener("change", () => {
+        Transactions._state.page = 1;
+        Transactions._load(container);
+      });
+    });
+
     container.querySelector("#btn-search").addEventListener("click", () => {
       Transactions._state.page = 1;
       Transactions._load(container);
@@ -374,15 +381,15 @@ const Transactions = {
     el.innerHTML = `
       <div class="summary-card">
         <div class="label">总收入</div>
-        <div class="value income">${fmtMoney(summary.total_income)}</div>
+        <div class="value income">${fmtMoneyInt(summary.total_income)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总支出</div>
-        <div class="value expense">${fmtMoney(summary.total_expense)}</div>
+        <div class="value expense">${fmtMoneyInt(summary.total_expense)}</div>
       </div>
       <div class="summary-card">
         <div class="label">结余</div>
-        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoney(bal)}</div>
+        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoneyInt(bal)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总笔数</div>

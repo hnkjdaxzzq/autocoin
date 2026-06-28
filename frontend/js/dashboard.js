@@ -8,13 +8,12 @@ const Dashboard = {
 
     container.innerHTML = `
       <div class="page-header">
-        <h1 class="page-title">概览</h1>
-        <div style="display:flex;gap:10px;align-items:center">
-          <label style="font-size:13px;color:var(--text-muted)">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+          <h1 class="page-title">概览</h1>
+          <div class="title-date-filter">
             <input type="date" id="dash-start" value="${yearStart}"> —
             <input type="date" id="dash-end" value="${today}">
-          </label>
-          <button class="btn btn-primary btn-sm" id="dash-refresh" style="padding:6px 14px">刷新</button>
+          </div>
         </div>
       </div>
 
@@ -39,10 +38,24 @@ const Dashboard = {
       </div>
     `;
 
-    container.querySelector("#dash-refresh").addEventListener("click", () => {
-      Dashboard._loadAll(container);
+    container.querySelectorAll("#dash-start, #dash-end").forEach(input => {
+      input.addEventListener("change", () => {
+        Dashboard._reload(container);
+      });
     });
 
+    Dashboard._loadAll(container);
+  },
+
+  _setLoading(container) {
+    const summary = container.querySelector("#summary-cards");
+    const recent = container.querySelector("#recent-tx");
+    if (summary) summary.innerHTML = `<div class="loading">加载中...</div>`;
+    if (recent) recent.innerHTML = `<div class="loading">加载中...</div>`;
+  },
+
+  _reload(container) {
+    Dashboard._setLoading(container);
     Dashboard._loadAll(container);
   },
 
@@ -80,28 +93,42 @@ const Dashboard = {
   _renderSummary(container, data) {
     const cards = container.querySelector("#summary-cards");
     const netClass = data.net >= 0 ? "positive" : "negative";
+    const days = dateRangeDays(
+      container.querySelector("#dash-start").value,
+      container.querySelector("#dash-end").value
+    );
+    const monthlyIncomeAvg = data.total_income / days * 30;
+    const monthlyExpenseAvg = data.total_expense / days * 30;
     cards.innerHTML = `
       <div class="summary-card">
         <div class="label">总收入</div>
-        <div class="value income">${fmtMoney(data.total_income)}</div>
+        <div class="value income">${fmtMoneyInt(data.total_income)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${data.income_count} 笔交易</div>
       </div>
       <div class="summary-card">
         <div class="label">总支出</div>
-        <div class="value expense">${fmtMoney(data.total_expense)}</div>
+        <div class="value expense">${fmtMoneyInt(data.total_expense)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${data.expense_count} 笔交易</div>
       </div>
       <div class="summary-card">
-        <div class="label">净结余</div>
-        <div class="value net ${netClass}">${fmtMoney(data.net)}</div>
+        <div class="label">结余</div>
+        <div class="value net ${netClass}">${fmtMoneyInt(data.net)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">共 ${data.transaction_count} 笔</div>
       </div>
       <div class="summary-card">
-        <div class="label">日均支出</div>
-        <div class="value" style="color:var(--primary)">
-          ${data.expense_count > 0 ? fmtMoney(data.total_expense / 30) : "¥0.00"}
-        </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">估算（按30天）</div>
+        <div class="label">总笔数</div>
+        <div class="value" style="color:var(--primary)">${data.transaction_count}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">当前筛选范围</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">月均收入</div>
+        <div class="value income">${fmtMoneyInt(monthlyIncomeAvg)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">按 ${days} 天折算</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">月均支出</div>
+        <div class="value expense">${fmtMoneyInt(monthlyExpenseAvg)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">按 ${days} 天折算</div>
       </div>
     `;
   },

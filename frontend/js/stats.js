@@ -2,7 +2,6 @@
 const Stats = {
   render(container) {
     const year = new Date().getFullYear();
-    const month = new Date().getMonth() + 1;
 
     container.innerHTML = `
       <div class="page-header">
@@ -92,8 +91,13 @@ const Stats = {
   },
 
   _setCategoryDateRange(container, year) {
+    const today = Stats._formatLocalDate(new Date());
     container.querySelector("#cat-start").value = `${year}-01-01`;
-    container.querySelector("#cat-end").value = `${year}-12-31`;
+    container.querySelector("#cat-end").value = `${year}-12-31` > today ? today : `${year}-12-31`;
+  },
+
+  _formatLocalDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
   },
 
   async _loadYear(container) {
@@ -115,23 +119,37 @@ const Stats = {
     const totalExpense = months.reduce((s, m) => s + m.expense, 0);
     const balance = totalIncome - totalExpense;
     const totalCount = months.reduce((s, m) => s + m.count, 0);
+    const days = dateRangeDays(
+      container.querySelector("#cat-start").value,
+      container.querySelector("#cat-end").value
+    );
+    const monthlyIncomeAvg = totalIncome / days * 30;
+    const monthlyExpenseAvg = totalExpense / days * 30;
 
     container.querySelector("#stat-year-summary").innerHTML = `
       <div class="summary-card">
         <div class="label">${year}年 总收入</div>
-        <div class="value income">${fmtMoney(totalIncome)}</div>
+        <div class="value income">${fmtMoneyInt(totalIncome)}</div>
       </div>
       <div class="summary-card">
         <div class="label">${year}年 总支出</div>
-        <div class="value expense">${fmtMoney(totalExpense)}</div>
+        <div class="value expense">${fmtMoneyInt(totalExpense)}</div>
       </div>
       <div class="summary-card">
         <div class="label">${year}年 结余</div>
-        <div class="value net ${balance >= 0 ? "positive" : "negative"}">${fmtMoney(balance)}</div>
+        <div class="value net ${balance >= 0 ? "positive" : "negative"}">${fmtMoneyInt(balance)}</div>
       </div>
       <div class="summary-card">
         <div class="label">${year}年 总笔数</div>
         <div class="value" style="color:var(--primary)">${totalCount}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">${year}年 月均收入</div>
+        <div class="value income">${fmtMoneyInt(monthlyIncomeAvg)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">${year}年 月均支出</div>
+        <div class="value expense">${fmtMoneyInt(monthlyExpenseAvg)}</div>
       </div>
     `;
   },

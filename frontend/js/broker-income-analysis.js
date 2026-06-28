@@ -32,11 +32,11 @@ const BrokerIncomeAnalysis = {
       <div class="page-header">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
           <h1 class="page-title">券商收入分析</h1>
-          <label class="title-date-filter">日期范围
+          <div class="title-date-filter">
             <input type="date" id="f-start" value="${yearStart}" placeholder="开始日期">
             <span style="color:#94a3b8">—</span>
             <input type="date" id="f-end" value="${today}" placeholder="结束日期">
-          </label>
+          </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="export-dropdown" id="export-dropdown">
@@ -325,6 +325,13 @@ const BrokerIncomeAnalysis = {
     const sourceToggle = container.querySelector("#f-source-toggle");
     const sourceMenu = container.querySelector("#f-source-menu");
 
+    container.querySelectorAll("#f-start, #f-end").forEach(input => {
+      input.addEventListener("change", () => {
+        BrokerIncomeAnalysis._state.page = 1;
+        BrokerIncomeAnalysis._load(container);
+      });
+    });
+
     sourceToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       sourceMenu.classList.toggle("show");
@@ -567,7 +574,7 @@ const BrokerIncomeAnalysis = {
       Charts.createDonut(
         "broker-source-donut",
         container.querySelector("#broker-source-donut"),
-        items.map(item => `${item.label} ${item.percentage}% ${fmtMoney(item.amount)}`),
+        items.map(item => `${item.label} ${item.percentage}% ${fmtChartMoney(item.amount)}`),
         items.map(item => item.amount),
         BrokerIncomeAnalysis._chartValueOptions({
           plugins: {
@@ -579,7 +586,7 @@ const BrokerIncomeAnalysis = {
                 return [
                   item.label,
                   `${item.percentage}%`,
-                  BrokerIncomeAnalysis._formatCompactMoney(value),
+                  fmtChartMoney(value),
                 ];
               },
               lineHeight: 15,
@@ -610,7 +617,7 @@ const BrokerIncomeAnalysis = {
           legend: { position: "top" },
           valueLabels: {
             display: true,
-            formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+            formatter: (value) => fmtChartMoney(value),
           },
           tooltip: {
             callbacks: {
@@ -634,7 +641,7 @@ const BrokerIncomeAnalysis = {
         legend: { position: "top" },
         valueLabels: {
           display: true,
-          formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+          formatter: (value) => fmtChartMoney(value),
         },
       },
       ...overrides,
@@ -642,7 +649,7 @@ const BrokerIncomeAnalysis = {
         legend: { position: "top" },
         valueLabels: {
           display: true,
-          formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+          formatter: (value) => fmtChartMoney(value),
         },
         ...(overrides.plugins || {}),
       },
@@ -650,8 +657,7 @@ const BrokerIncomeAnalysis = {
   },
 
   _formatCompactMoney(value) {
-    const amount = Number(value) || 0;
-    return `¥${(amount / 10000).toFixed(2)}万`;
+    return fmtChartMoney(value);
   },
 
   _truncateLabel(label, maxLength) {
@@ -663,18 +669,27 @@ const BrokerIncomeAnalysis = {
     const el = container.querySelector("#tx-summary");
     if (!summary) { el.innerHTML = ""; return; }
     const bal = summary.balance;
+    const days = dateRangeDays(
+      container.querySelector("#f-start").value,
+      container.querySelector("#f-end").value
+    );
+    const monthlyNetAvg = bal / days * 30;
     el.innerHTML = `
       <div class="summary-card">
         <div class="label">总收入</div>
-        <div class="value income">${fmtMoney(summary.total_income)}</div>
+        <div class="value income">${fmtMoneyInt(summary.total_income)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总支出</div>
-        <div class="value expense">${fmtMoney(summary.total_expense)}</div>
+        <div class="value expense">${fmtMoneyInt(summary.total_expense)}</div>
       </div>
       <div class="summary-card">
-        <div class="label">结余</div>
-        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoney(bal)}</div>
+        <div class="label">净收入</div>
+        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoneyInt(bal)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">月均净收入</div>
+        <div class="value net ${monthlyNetAvg >= 0 ? "positive" : "negative"}">${fmtMoneyInt(monthlyNetAvg)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总笔数</div>

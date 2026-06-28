@@ -392,15 +392,15 @@ const DataManagement = {
     el.innerHTML = `
       <div class="summary-card">
         <div class="label">总收入</div>
-        <div class="value income">${fmtMoney(summary.total_income)}</div>
+        <div class="value income">${fmtMoneyInt(summary.total_income)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总支出</div>
-        <div class="value expense">${fmtMoney(summary.total_expense)}</div>
+        <div class="value expense">${fmtMoneyInt(summary.total_expense)}</div>
       </div>
       <div class="summary-card">
         <div class="label">结余</div>
-        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoney(bal)}</div>
+        <div class="value net ${bal >= 0 ? "positive" : "negative"}">${fmtMoneyInt(bal)}</div>
       </div>
       <div class="summary-card">
         <div class="label">总笔数</div>

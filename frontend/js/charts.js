@@ -5,6 +5,24 @@ const PALETTE = [
   "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#14b8a6",
 ];
 
+function mergeChartOptions(base, extra = {}) {
+  const merged = { ...base, ...extra };
+  merged.plugins = { ...(base.plugins || {}), ...(extra.plugins || {}) };
+  merged.scales = { ...(base.scales || {}), ...(extra.scales || {}) };
+  Object.keys(merged.plugins).forEach((key) => {
+    if (base.plugins?.[key] && extra.plugins?.[key]) {
+      merged.plugins[key] = { ...base.plugins[key], ...extra.plugins[key] };
+      if (base.plugins[key].callbacks || extra.plugins[key].callbacks) {
+        merged.plugins[key].callbacks = {
+          ...(base.plugins[key].callbacks || {}),
+          ...(extra.plugins[key].callbacks || {}),
+        };
+      }
+    }
+  });
+  return merged;
+}
+
 if (typeof Chart !== "undefined") {
   Chart.register({
     id: "valueLabels",
@@ -65,6 +83,28 @@ if (typeof Chart !== "undefined") {
 const Charts = {
   _instances: {},
 
+  valueLabelOptions(overrides = {}) {
+    return mergeChartOptions({
+      layout: { padding: { top: 18, right: 16, bottom: 4, left: 16 } },
+      plugins: {
+        valueLabels: {
+          display: true,
+          color: () => chartAmountColor(),
+          formatter: (value) => fmtChartMoney(value),
+        },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const label = context.dataset?.label || context.label || "";
+              const value = context.parsed?.y ?? context.parsed ?? context.raw;
+              return `${label ? `${label}: ` : ""}${fmtMoney(value)}`;
+            },
+          },
+        },
+      },
+    }, overrides);
+  },
+
   destroy(key) {
     if (Charts._instances[key]) {
       Charts._instances[key].destroy();
@@ -72,40 +112,51 @@ const Charts = {
     }
   },
 
+  refreshAll() {
+    Object.values(Charts._instances).forEach((chart) => {
+      if (chart) chart.update("none");
+    });
+  },
+
   createBar(key, ctx, labels, datasets, opts = {}) {
     Charts.destroy(key);
+    const options = Charts.valueLabelOptions(mergeChartOptions({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top" } },
+      scales: { y: { beginAtZero: true } },
+    }, opts));
     Charts._instances[key] = new Chart(ctx, {
       type: "bar",
       data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "top" } },
-        scales: { y: { beginAtZero: true } },
-        ...opts,
-      },
+      options,
     });
     return Charts._instances[key];
   },
 
   createLine(key, ctx, labels, datasets, opts = {}) {
     Charts.destroy(key);
+    const options = Charts.valueLabelOptions(mergeChartOptions({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top" } },
+      tension: 0.3,
+    }, opts));
     Charts._instances[key] = new Chart(ctx, {
       type: "line",
       data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "top" } },
-        tension: 0.3,
-        ...opts,
-      },
+      options,
     });
     return Charts._instances[key];
   },
 
   createDonut(key, ctx, labels, data, opts = {}) {
     Charts.destroy(key);
+    const options = Charts.valueLabelOptions(mergeChartOptions({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "right" } },
+    }, opts));
     Charts._instances[key] = new Chart(ctx, {
       type: "doughnut",
       data: {
@@ -116,12 +167,7 @@ const Charts = {
           borderWidth: 2,
         }],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "right" } },
-        ...opts,
-      },
+      options,
     });
     return Charts._instances[key];
   },
@@ -130,6 +176,50 @@ const Charts = {
 /* ===== Formatting helpers ===== */
 function fmtMoney(n) {
   return "¥" + Number(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtMoneyInt(n) {
+  return "¥" + Number(n).toLocaleString("zh-CN", { maximumFractionDigits: 0 });
+}
+
+function fmtChartMoney(n) {
+  const amount = Number(n) || 0;
+  const abs = Math.abs(amount);
+  if (abs >= 10000) {
+    const value = amount / 10000;
+    return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}万`;
+  }
+  return fmtMoneyInt(amount);
+}
+
+function chartAmountColor() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--card-bg").trim();
+  const match = bg.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "#fff" : "#000";
+  }
+  const hex = match[1].length === 3
+    ? match[1].split("").map((c) => c + c).join("")
+    : match[1];
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance < 0.45 ? "#fff" : "#000";
+}
+
+function dateRangeDays(start, end) {
+  const parseDate = (value) => {
+    if (!value) return null;
+    const parts = String(value).split("-").map(Number);
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  };
+  const startDate = parseDate(start);
+  const endDate = parseDate(end);
+  if (!startDate || !endDate) return 1;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.floor((endDate - startDate) / msPerDay) + 1);
 }
 
 function fmtDate(s) {
