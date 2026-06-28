@@ -1986,6 +1986,13 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   transform: translate(-50%, 0);
 }
 
+.import-hover-toast {
+  max-width: min(760px, calc(100vw - 32px));
+  line-height: 1.6;
+  text-align: left;
+  white-space: normal;
+}
+
 .modal-table-wrap {
   max-height: 60vh;
   overflow-y: auto;

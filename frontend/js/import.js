@@ -6,6 +6,7 @@ const Import = {
   _filePreviews: [],
   _fileImportNotices: [],
   _nextFilePreviewId: 1,
+  _hoverToastTimer: null,
   _history: {
     batches: [],
     page: 1,
@@ -157,11 +158,24 @@ const Import = {
       "moomoo": "moomoo",
       "cmb-securities": "招商证券",
     };
+    const hoverTips = {
+      "hsbc-pulse": "支持导入汇丰香港PULSE信用卡结单，该结单获取路径：汇丰香港手机APP>右上角头像>电子结单，筛选信用卡结单并保存PDF",
+      "ibkr": "支持导入盈透证券的电子结单，操作路径为 报表与税务>活动报表，选择日期范围后，下载csv文件",
+      "moomoo": "支持导入MOOMOO证券结单，路径为 账户>全部>我的结单> 筛选月结单，保存该月结单pdf文件",
+      "cmb-securities": "支持导入招商证券的，路径为 招商证券PC端，查询资金流水，选择日期范围，点击查询，再点击输出，选择输出EXCEL文件",
+    };
     const cmbInput = container.querySelector("#cmb-securities-file-input");
     const ibkrInput = container.querySelector("#ibkr-file-input");
     const moomooInput = container.querySelector("#moomoo-file-input");
     const hsbcPulseInput = container.querySelector("#hsbc-pulse-file-input");
     container.querySelectorAll(".quick-import-btn").forEach(btn => {
+      const hoverTip = hoverTips[btn.dataset.source];
+      if (hoverTip) {
+        btn.addEventListener("mouseenter", () => Import._showHoverToast(hoverTip));
+        btn.addEventListener("focus", () => Import._showHoverToast(hoverTip));
+        btn.addEventListener("mouseleave", () => Import._hideHoverToast());
+        btn.addEventListener("blur", () => Import._hideHoverToast());
+      }
       btn.addEventListener("click", () => {
         const source = btn.dataset.source;
         if (source === "hsbc-pulse") {
@@ -200,6 +214,25 @@ const Import = {
       Import._uploadFiles(Array.from(hsbcPulseInput.files), container, { source: "hsbc-pulse", label: "汇丰PULSE信用卡" });
       hsbcPulseInput.value = "";
     });
+  },
+
+  _showHoverToast(message) {
+    clearTimeout(Import._hoverToastTimer);
+    const existing = document.querySelector(".toast-message");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.className = "toast-message import-hover-toast";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add("show"), 10);
+  },
+
+  _hideHoverToast() {
+    clearTimeout(Import._hoverToastTimer);
+    const toast = document.querySelector(".toast-message.import-hover-toast");
+    if (!toast) return;
+    toast.classList.remove("show");
+    Import._hoverToastTimer = setTimeout(() => toast.remove(), 200);
   },
 
   async _uploadFiles(files, container, options = {}) {
