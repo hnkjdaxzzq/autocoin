@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from autocoin.models.alias_rule import AliasRule
 from autocoin.models.classification_rule import ClassificationRule
 from autocoin.models.transaction import Transaction
 from autocoin.models.import_batch import ImportBatch
@@ -26,6 +27,7 @@ def _tx_to_dict(tx: Transaction) -> dict:
         "counterparty": tx.counterparty,
         "counterparty_account": tx.counterparty_account,
         "product": tx.product,
+        "product_alias": tx.product_alias,
         "direction": tx.direction,
         "amount": tx.amount,
         "payment_method": tx.payment_method,
@@ -68,6 +70,22 @@ def _rule_to_dict(rule: ClassificationRule) -> dict:
     }
 
 
+def _alias_rule_to_dict(rule: AliasRule) -> dict:
+    return {
+        "id": rule.id,
+        "name": rule.name,
+        "priority": rule.priority,
+        "is_active": rule.is_active,
+        "match_counterparty": rule.match_counterparty,
+        "match_product": rule.match_product,
+        "match_payment_method": rule.match_payment_method,
+        "match_transaction_type": rule.match_transaction_type,
+        "product_alias": rule.product_alias,
+        "created_at": rule.created_at.isoformat() if rule.created_at else None,
+        "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
+    }
+
+
 def _normalize_sources(source) -> list[str]:
     if not source:
         return []
@@ -104,6 +122,17 @@ class SQLiteRepository(DataRepository):
             .all()
         )
 
+    def _list_active_alias_rules(self) -> list[AliasRule]:
+        return (
+            self._db.query(AliasRule)
+            .filter(
+                AliasRule.user_id == self._user_id,
+                AliasRule.is_active == True,
+            )
+            .order_by(AliasRule.priority.asc(), AliasRule.id.asc())
+            .all()
+        )
+
     def _matches_rule(self, item: dict, rule: ClassificationRule) -> bool:
         def matches(value: str, pattern: str) -> bool:
             if not pattern:
@@ -118,6 +147,9 @@ class SQLiteRepository(DataRepository):
             matches(item.get("payment_method", ""), rule.match_payment_method),
             matches(item.get("transaction_type", ""), rule.match_transaction_type),
         ])
+
+    def _matches_alias_rule(self, item: dict, rule: AliasRule) -> bool:
+        return self._matches_rule(item, rule)
 
     def _apply_classification_rules(self, item: dict) -> dict:
         normalized = dict(item)
@@ -142,6 +174,16 @@ class SQLiteRepository(DataRepository):
                 remark_parts.append(f"原数据分类为：{orig_category}")
             if remark_parts:
                 normalized["remark"] = "；".join(remark_parts)
+            break
+        return normalized
+
+    def _apply_alias_rules(self, item: dict) -> dict:
+        normalized = dict(item)
+        for rule in self._list_active_alias_rules():
+            if not self._matches_alias_rule(normalized, rule):
+                continue
+            if rule.product_alias:
+                normalized["product_alias"] = rule.product_alias
             break
         return normalized
 
@@ -237,6 +279,7 @@ class SQLiteRepository(DataRepository):
 
     def create_transaction(self, data: dict) -> dict:
         data = self._apply_classification_rules(data)
+        data = self._apply_alias_rules(data)
         now = datetime.utcnow()
         tx = Transaction(
             user_id=self._user_id,
@@ -249,6 +292,7 @@ class SQLiteRepository(DataRepository):
             counterparty=data.get("counterparty", ""),
             counterparty_account=data.get("counterparty_account", ""),
             product=data.get("product", ""),
+            product_alias=data.get("product_alias", ""),
             direction=data["direction"],
             amount=float(data["amount"]),
             payment_method=data.get("payment_method", ""),
@@ -342,6 +386,7 @@ class SQLiteRepository(DataRepository):
         rows = []
         for item in items:
             item = self._apply_classification_rules(item)
+            item = self._apply_alias_rules(item)
             transaction_time = item["transaction_time"]
             if isinstance(transaction_time, str):
                 transaction_time = datetime.fromisoformat(transaction_time.replace("T", " "))
@@ -356,6 +401,7 @@ class SQLiteRepository(DataRepository):
                 "counterparty": item.get("counterparty"),
                 "counterparty_account": item.get("counterparty_account"),
                 "product": item.get("product"),
+                "product_alias": item.get("product_alias"),
                 "direction": item["direction"],
                 "amount": item["amount"],
                 "payment_method": item.get("payment_method"),
@@ -398,6 +444,33 @@ class SQLiteRepository(DataRepository):
             if cat_changed or rem_changed:
                 tx.category = applied.get("category", tx.category)
                 tx.remark = applied.get("remark", tx.remark)
+                tx.updated_at = datetime.utcnow()
+                changes.append({
+                    "id": tx.id,
+                    "before": original,
+                    "after": applied,
+                })
+        if changes:
+            self._db.commit()
+        return {"modified_count": len(changes), "changes": changes}
+
+    def realias_all_transactions(self) -> dict:
+        """Apply alias rules to all non-deleted transactions, updating product_alias only."""
+        txs = (
+            self._db.query(Transaction)
+            .filter(
+                Transaction.user_id == self._user_id,
+                Transaction.is_deleted == 0,
+            )
+            .all()
+        )
+        changes = []
+        for tx in txs:
+            original = _tx_to_dict(tx)
+            applied = self._apply_alias_rules(original.copy())
+            alias_changed = original.get("product_alias") != applied.get("product_alias")
+            if alias_changed:
+                tx.product_alias = applied.get("product_alias", tx.product_alias)
                 tx.updated_at = datetime.utcnow()
                 changes.append({
                     "id": tx.id,
@@ -824,6 +897,67 @@ class SQLiteRepository(DataRepository):
             .filter(
                 ClassificationRule.id == rule_id,
                 ClassificationRule.user_id == self._user_id,
+            )
+            .first()
+        )
+        if not rule:
+            return False
+        self._db.delete(rule)
+        self._db.commit()
+        return True
+
+    # ---------- Alias Rules ----------
+
+    def list_alias_rules(self) -> list[dict]:
+        rules = (
+            self._db.query(AliasRule)
+            .filter(AliasRule.user_id == self._user_id)
+            .order_by(AliasRule.priority.asc(), AliasRule.id.asc())
+            .all()
+        )
+        return [_alias_rule_to_dict(rule) for rule in rules]
+
+    def create_alias_rule(self, data: dict) -> dict:
+        rule = AliasRule(
+            user_id=self._user_id,
+            name=data["name"],
+            priority=data.get("priority", 100),
+            is_active=data.get("is_active", True),
+            match_counterparty=data.get("match_counterparty", ""),
+            match_product=data.get("match_product", ""),
+            match_payment_method=data.get("match_payment_method", ""),
+            match_transaction_type=data.get("match_transaction_type", ""),
+            product_alias=data.get("product_alias", ""),
+        )
+        self._db.add(rule)
+        self._db.commit()
+        self._db.refresh(rule)
+        return _alias_rule_to_dict(rule)
+
+    def update_alias_rule(self, rule_id: int, data: dict) -> Optional[dict]:
+        rule = (
+            self._db.query(AliasRule)
+            .filter(
+                AliasRule.id == rule_id,
+                AliasRule.user_id == self._user_id,
+            )
+            .first()
+        )
+        if not rule:
+            return None
+        for key, value in data.items():
+            setattr(rule, key, value)
+        rule.updated_at = datetime.utcnow()
+        self._db.commit()
+        self._db.refresh(rule)
+        return _alias_rule_to_dict(rule)
+
+    def delete_alias_rule(self, rule_id: int) -> bool:
+        rule = (
+            self._db.query(AliasRule)
+            .filter(
+                AliasRule.id == rule_id,
+                AliasRule.user_id == self._user_id,
             )
             .first()
         )

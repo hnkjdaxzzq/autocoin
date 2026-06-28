@@ -399,8 +399,25 @@ const API = {
         body: JSON.stringify(body),
       }),
     delete: (id) => apiFetch(`/rules/${id}`, { method: "DELETE" }),
-        reclassify: () => apiFetch("/rules/reclassify", { method: "POST" }),
-      },
+    reclassify: () => apiFetch("/rules/reclassify", { method: "POST" }),
+  },
+  aliasRules: {
+    list: () => apiFetch("/rules/aliases"),
+    create: (body) =>
+      apiFetch("/rules/aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    update: (id, body) =>
+      apiFetch(`/rules/aliases/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    delete: (id) => apiFetch(`/rules/aliases/${id}`, { method: "DELETE" }),
+    realias: () => apiFetch("/rules/aliases/realias", { method: "POST" }),
+  },
   stats: {
     summary: (params) =>
       apiFetch("/statistics/summary?" + new URLSearchParams(

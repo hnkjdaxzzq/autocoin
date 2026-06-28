@@ -532,6 +532,7 @@ const BrokerIncomeAnalysis = {
             <th>分类</th>
             <th>交易对方</th>
             <th>商品</th>
+            <th>别名</th>
             <th>方向</th>
             <th>金额</th>
             <th>支付方式</th>
@@ -555,6 +556,9 @@ const BrokerIncomeAnalysis = {
               </td>
               <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.product || ""}">
                 ${tx.product || "—"}
+              </td>
+              <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tx.product_alias || ""}">
+                ${tx.product_alias || "—"}
               </td>
               <td>${directionBadge(tx.direction)}</td>
               <td style="font-weight:600;

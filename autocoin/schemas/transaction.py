@@ -15,6 +15,7 @@ class TransactionResponse(BaseModel):
     counterparty: Optional[str] = None
     counterparty_account: Optional[str] = None
     product: Optional[str] = None
+    product_alias: Optional[str] = None
     direction: str
     amount: float
     payment_method: Optional[str] = None

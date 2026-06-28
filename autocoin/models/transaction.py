@@ -19,6 +19,7 @@ class Transaction(Base):
     counterparty = Column(String(128), nullable=True)
     counterparty_account = Column(String(128), nullable=True)
     product = Column(Text, nullable=True)
+    product_alias = Column(String(128), nullable=True, index=True)
     direction = Column(String(10), nullable=False, index=True)       # 'income'|'expense'|'neutral'
     amount = Column(Float, nullable=False)
     payment_method = Column(String(64), nullable=True)
