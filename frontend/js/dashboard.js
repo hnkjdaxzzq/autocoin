@@ -130,6 +130,11 @@ const Dashboard = {
         <div class="value expense">${fmtMoneyInt(monthlyExpenseAvg)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">按 ${days} 天折算</div>
       </div>
+      <div class="summary-card">
+        <div class="label">月均结余</div>
+        <div class="value net ${monthlyIncomeAvg - monthlyExpenseAvg >= 0 ? "positive" : "negative"}">${fmtMoneyInt(monthlyIncomeAvg - monthlyExpenseAvg)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">按 ${days} 天折算</div>
+      </div>
     `;
   },
 
