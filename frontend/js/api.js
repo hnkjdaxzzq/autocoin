@@ -450,5 +450,13 @@ const API = {
       apiFetch("/broker-income-analysis/monthly?" + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       )),
+    incomeBySource: (params) =>
+      apiFetch("/broker-income-analysis/income-by-source?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+    incomeByProduct: (params) =>
+      apiFetch("/broker-income-analysis/income-by-product?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
   },
 };

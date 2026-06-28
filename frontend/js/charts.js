@@ -5,6 +5,63 @@ const PALETTE = [
   "#84cc16", "#e11d48", "#0ea5e9", "#d946ef", "#14b8a6",
 ];
 
+if (typeof Chart !== "undefined") {
+  Chart.register({
+    id: "valueLabels",
+    afterDatasetsDraw(chart, _args, pluginOptions) {
+      if (!pluginOptions || pluginOptions.display === false) return;
+      const { ctx } = chart;
+      const formatter = pluginOptions.formatter || ((value) => String(value));
+      const color = typeof pluginOptions.color === "function"
+        ? pluginOptions.color({ chart })
+        : (pluginOptions.color || "#334155");
+      const font = pluginOptions.font || "600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+      const offset = pluginOptions.offset ?? 6;
+      const lineHeight = pluginOptions.lineHeight || 14;
+
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.font = font;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      chart.data.datasets.forEach((dataset, datasetIndex) => {
+        const meta = chart.getDatasetMeta(datasetIndex);
+        if (meta.hidden) return;
+        meta.data.forEach((element, dataIndex) => {
+          const rawValue = Array.isArray(dataset.data) ? dataset.data[dataIndex] : null;
+          if (rawValue === null || rawValue === undefined || Number(rawValue) === 0) return;
+          const label = formatter(rawValue, { chart, dataset, datasetIndex, dataIndex });
+          if (!label) return;
+          const lines = Array.isArray(label) ? label : String(label).split("\n");
+
+          const drawLabel = (x, y) => {
+            const startY = y - ((lines.length - 1) * lineHeight) / 2;
+            lines.forEach((line, lineIndex) => {
+              ctx.fillText(line, x, startY + lineIndex * lineHeight);
+            });
+          };
+
+          const props = element.getProps(["x", "y", "base", "startAngle", "endAngle", "innerRadius", "outerRadius"], true);
+          if (chart.config.type === "doughnut" || chart.config.type === "pie") {
+            const angle = (props.startAngle + props.endAngle) / 2;
+            const radius = (props.innerRadius + props.outerRadius) / 2;
+            drawLabel(props.x + Math.cos(angle) * radius, props.y + Math.sin(angle) * radius);
+            return;
+          }
+
+          const y = chart.config.type === "bar"
+            ? props.y + (props.y < props.base ? -offset : offset)
+            : props.y - offset;
+          drawLabel(props.x, y);
+        });
+      });
+
+      ctx.restore();
+    },
+  });
+}
+
 const Charts = {
   _instances: {},
 

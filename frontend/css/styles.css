@@ -231,6 +231,17 @@ body {
   height: 280px;
 }
 
+.broker-chart-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.broker-chart-stack .chart-canvas-wrap {
+  height: 340px;
+}
+
 /* ===== Page header ===== */
 .page-header {
   display: flex;

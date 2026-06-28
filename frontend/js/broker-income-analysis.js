@@ -2,7 +2,7 @@
 const BrokerIncomeAnalysis = {
   _state: {
     page: 1,
-    page_size: 50,
+    page_size: 15,
     total: 0,
     total_pages: 1,
     filters: {},
@@ -146,14 +146,29 @@ const BrokerIncomeAnalysis = {
         <button class="btn btn-ghost" id="btn-reset">重置</button>
       </div>
 
-      <div class="charts-grid" style="margin-bottom:16px">
+      <div class="summary-grid" id="tx-summary"></div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">月度明细列表</div>
+        <div id="broker-monthly-table"></div>
+      </div>
+
+      <div class="broker-chart-stack">
+        <div class="card">
+          <div class="card-title">净收入</div>
+          <div class="chart-canvas-wrap"><canvas id="broker-net-line"></canvas></div>
+        </div>
         <div class="card">
           <div class="card-title" id="broker-monthly-title">月度收支</div>
           <div class="chart-canvas-wrap"><canvas id="broker-monthly-bar"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">收支净额趋势</div>
-          <div class="chart-canvas-wrap"><canvas id="broker-net-line"></canvas></div>
+          <div class="card-title">分券商统计</div>
+          <div class="chart-canvas-wrap" id="broker-source-chart-wrap"><canvas id="broker-source-donut"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">分股票统计</div>
+          <div class="chart-canvas-wrap" id="broker-product-chart-wrap"><canvas id="broker-product-bar"></canvas></div>
         </div>
       </div>
 
@@ -167,8 +182,6 @@ const BrokerIncomeAnalysis = {
         <button class="btn btn-danger btn-sm" id="btn-batch-delete">批量删除</button>
         <button class="btn btn-ghost btn-sm" id="btn-batch-clear">取消选择</button>
       </div>
-
-      <div class="summary-grid" id="tx-summary"></div>
 
       <div class="table-wrap" id="tx-table-wrap">
         <div class="loading">加载中...</div>
@@ -446,7 +459,7 @@ const BrokerIncomeAnalysis = {
     const wrap = container.querySelector("#tx-table-wrap");
     wrap.innerHTML = `<div class="loading">加载中...</div>`;
     const filters = BrokerIncomeAnalysis._getFilters(container);
-    BrokerIncomeAnalysis._loadMonthlyCharts(container, filters);
+    BrokerIncomeAnalysis._loadAnalysis(container, filters);
     try {
       const data = await API.brokerIncomeAnalysis.list({
         ...filters,
@@ -462,34 +475,188 @@ const BrokerIncomeAnalysis = {
     }
   },
 
-  async _loadMonthlyCharts(container, filters) {
+  async _loadAnalysis(container, filters) {
     container.querySelector("#broker-monthly-title").textContent =
       `月度收支（${filters.start_date || "不限"} 至 ${filters.end_date || "不限"}）`;
     try {
-      const data = await API.brokerIncomeAnalysis.monthly({
-        start_date: filters.start_date,
-        end_date: filters.end_date,
-        source: filters.source,
-      });
+      const data = await API.brokerIncomeAnalysis.monthly(filters);
       const months = data.months || [];
       const labels = months.map(m => m.month);
-      Charts.createBar("broker-monthly-bar", container.querySelector("#broker-monthly-bar"), labels, [
-        { label: "支出", data: months.map(m => m.expense), backgroundColor: "rgba(239,68,68,0.75)" },
-        { label: "收入", data: months.map(m => m.income), backgroundColor: "rgba(34,197,94,0.75)" },
-      ]);
       Charts.createLine("broker-net-line", container.querySelector("#broker-net-line"), labels, [
         {
-          label: "净结余",
+          label: "净收入",
           data: months.map(m => m.net),
           borderColor: "#4f6ef7",
           backgroundColor: "rgba(79,110,247,0.1)",
           fill: true,
           pointBackgroundColor: months.map(m => m.net >= 0 ? "#22c55e" : "#ef4444"),
         },
-      ]);
+      ], BrokerIncomeAnalysis._chartValueOptions());
+      Charts.createBar("broker-monthly-bar", container.querySelector("#broker-monthly-bar"), labels, [
+        { label: "支出", data: months.map(m => m.expense), backgroundColor: "rgba(239,68,68,0.75)" },
+        { label: "收入", data: months.map(m => m.income), backgroundColor: "rgba(34,197,94,0.75)" },
+      ], BrokerIncomeAnalysis._chartValueOptions());
+      BrokerIncomeAnalysis._renderMonthlyTable(container, months);
     } catch (err) {
-      showError(container.querySelector("#tx-table-wrap"), err.message);
+      showError(container.querySelector("#broker-monthly-table"), err.message);
     }
+
+    BrokerIncomeAnalysis._loadSourceChart(container, filters);
+    BrokerIncomeAnalysis._loadProductChart(container, filters);
+  },
+
+  _renderMonthlyTable(container, months) {
+    const el = container.querySelector("#broker-monthly-table");
+    if (!months.length) {
+      el.innerHTML = `<div class="empty">暂无数据</div>`;
+      return;
+    }
+
+    const totalIncome = months.reduce((s, m) => s + m.income, 0);
+    const totalExpense = months.reduce((s, m) => s + m.expense, 0);
+    const totalNet = totalIncome - totalExpense;
+    let cumulative = 0;
+    const cumulativeData = months.map(m => {
+      cumulative += m.net;
+      return cumulative;
+    });
+
+    el.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>月份</th><th>收入</th><th>支出</th><th>月结余</th><th>累计结余</th><th>笔数</th></tr>
+        </thead>
+        <tbody>
+          ${months.map((m, i) => `
+            <tr>
+              <td>${m.month}</td>
+              <td style="color:var(--income)">${fmtMoney(m.income)}</td>
+              <td style="color:var(--expense)">${fmtMoney(m.expense)}</td>
+              <td style="font-weight:600;color:${m.net >= 0 ? "var(--income)" : "var(--expense)"}">
+                ${fmtMoney(m.net)}
+              </td>
+              <td style="font-weight:600;color:${cumulativeData[i] >= 0 ? "var(--income)" : "var(--expense)"}">
+                ${fmtMoney(cumulativeData[i])}
+              </td>
+              <td>${m.count}</td>
+            </tr>`).join("")}
+          <tr style="font-weight:700;border-top:2px solid var(--border)">
+            <td>合计</td>
+            <td style="color:var(--income)">${fmtMoney(totalIncome)}</td>
+            <td style="color:var(--expense)">${fmtMoney(totalExpense)}</td>
+            <td style="color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
+            <td style="color:${totalNet >= 0 ? "var(--income)" : "var(--expense)"}">${fmtMoney(totalNet)}</td>
+            <td>${months.reduce((s, m) => s + m.count, 0)}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  },
+
+  async _loadSourceChart(container, filters) {
+    const wrap = container.querySelector("#broker-source-chart-wrap");
+    try {
+      const data = await API.brokerIncomeAnalysis.incomeBySource(filters);
+      const items = data.items || [];
+      if (!items.length) {
+        Charts.destroy("broker-source-donut");
+        wrap.innerHTML = `<div class="empty">暂无收入数据</div>`;
+        return;
+      }
+      wrap.innerHTML = `<canvas id="broker-source-donut"></canvas>`;
+      Charts.createDonut(
+        "broker-source-donut",
+        container.querySelector("#broker-source-donut"),
+        items.map(item => `${item.label} ${item.percentage}% ${fmtMoney(item.amount)}`),
+        items.map(item => item.amount),
+        BrokerIncomeAnalysis._chartValueOptions({
+          plugins: {
+            legend: { position: "right" },
+            valueLabels: {
+              display: true,
+              formatter: (value, context) => {
+                const item = items[context.dataIndex];
+                return [
+                  item.label,
+                  `${item.percentage}%`,
+                  BrokerIncomeAnalysis._formatCompactMoney(value),
+                ];
+              },
+              lineHeight: 15,
+            },
+          },
+        })
+      );
+    } catch (err) {
+      showError(wrap, err.message);
+    }
+  },
+
+  async _loadProductChart(container, filters) {
+    const wrap = container.querySelector("#broker-product-chart-wrap");
+    try {
+      const data = await API.brokerIncomeAnalysis.incomeByProduct(filters);
+      const items = (data.items || []).slice(0, 20);
+      if (!items.length) {
+        Charts.destroy("broker-product-bar");
+        wrap.innerHTML = `<div class="empty">暂无收入数据</div>`;
+        return;
+      }
+      wrap.innerHTML = `<canvas id="broker-product-bar"></canvas>`;
+      Charts.createBar("broker-product-bar", container.querySelector("#broker-product-bar"), items.map(item => BrokerIncomeAnalysis._truncateLabel(item.label, 10)), [
+        { label: "收入金额", data: items.map(item => item.amount), backgroundColor: "rgba(79,110,247,0.75)" },
+      ], BrokerIncomeAnalysis._chartValueOptions({
+        plugins: {
+          legend: { position: "top" },
+          valueLabels: {
+            display: true,
+            formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const item = items[context.dataIndex];
+                return `${item.label}: ${fmtMoney(item.amount)} (${item.percentage}%)`;
+              },
+            },
+          },
+        },
+      }));
+    } catch (err) {
+      showError(wrap, err.message);
+    }
+  },
+
+  _chartValueOptions(overrides = {}) {
+    return {
+      layout: { padding: { top: 18, right: 16, bottom: 4, left: 16 } },
+      plugins: {
+        legend: { position: "top" },
+        valueLabels: {
+          display: true,
+          formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+        },
+      },
+      ...overrides,
+      plugins: {
+        legend: { position: "top" },
+        valueLabels: {
+          display: true,
+          formatter: (value) => BrokerIncomeAnalysis._formatCompactMoney(value),
+        },
+        ...(overrides.plugins || {}),
+      },
+    };
+  },
+
+  _formatCompactMoney(value) {
+    const amount = Number(value) || 0;
+    return `¥${(amount / 10000).toFixed(2)}万`;
+  },
+
+  _truncateLabel(label, maxLength) {
+    const text = String(label || "");
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
   },
 
   _renderSummary(container, summary) {

@@ -566,29 +566,32 @@ class SQLiteRepository(DataRepository):
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        direction: Optional[str] = None,
+        category: Optional[str] = None,
         source=None,
+        search: Optional[str] = None,
     ) -> list[dict]:
-        q = (
-            self._db.query(
+        q = self._build_filter_query(
+            start_date=start_date,
+            end_date=end_date,
+            direction=direction,
+            category=category,
+            source=source,
+            search=search,
+        ).filter(Transaction.direction.in_(["income", "expense"]))
+
+        rows = (
+            q.with_entities(
                 func.strftime("%Y-%m", Transaction.transaction_time).label("month_key"),
                 Transaction.direction,
                 func.sum(Transaction.amount).label("total"),
                 func.count(Transaction.id).label("cnt"),
             )
-            .filter(
-                Transaction.is_deleted == 0,
-                Transaction.user_id == self._user_id,
-                Transaction.direction.in_(["income", "expense"]),
-            )
+            .group_by("month_key", Transaction.direction)
+            .order_by("month_key")
+            .all()
         )
-        if start_date:
-            q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
-        if end_date:
-            end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
-            q = q.filter(Transaction.transaction_time <= end_dt)
-        q = _apply_source_filter(q, source)
 
-        rows = q.group_by("month_key", Transaction.direction).order_by("month_key").all()
         month_data: dict[str, dict] = {}
         for row in rows:
             key = row.month_key
@@ -603,6 +606,79 @@ class SQLiteRepository(DataRepository):
         for item in month_data.values():
             item["net"] = round(item["income"] - item["expense"], 2)
         return list(month_data.values())
+
+    def get_income_stats_by_source(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        direction: Optional[str] = None,
+        category: Optional[str] = None,
+        source=None,
+        search: Optional[str] = None,
+    ) -> list[dict]:
+        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = q.filter(Transaction.direction == "income")
+
+        rows = (
+            q.with_entities(
+                Transaction.source.label("label"),
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("cnt"),
+            )
+            .group_by(Transaction.source)
+            .order_by(func.sum(Transaction.amount).desc())
+            .all()
+        )
+
+        grand_total = sum((r.total or 0) for r in rows) or 0.0
+        return [
+            {
+                "label": r.label or "未标记来源",
+                "amount": round(r.total or 0, 2),
+                "count": r.cnt,
+                "percentage": round((r.total or 0) / grand_total * 100, 2) if grand_total else 0.0,
+            }
+            for r in rows
+        ]
+
+    def get_income_stats_by_product(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        direction: Optional[str] = None,
+        category: Optional[str] = None,
+        source=None,
+        search: Optional[str] = None,
+    ) -> list[dict]:
+        product_label = func.coalesce(
+            func.nullif(Transaction.product_alias, ""),
+            func.nullif(Transaction.product, ""),
+            "未命名商品",
+        )
+        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = q.filter(Transaction.direction == "income")
+
+        rows = (
+            q.with_entities(
+                product_label.label("label"),
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("cnt"),
+            )
+            .group_by(product_label)
+            .order_by(func.sum(Transaction.amount).desc())
+            .all()
+        )
+
+        grand_total = sum((r.total or 0) for r in rows) or 0.0
+        return [
+            {
+                "label": r.label or "未命名商品",
+                "amount": round(r.total or 0, 2),
+                "count": r.cnt,
+                "percentage": round((r.total or 0) / grand_total * 100, 2) if grand_total else 0.0,
+            }
+            for r in rows
+        ]
 
     def get_category_stats(
         self,

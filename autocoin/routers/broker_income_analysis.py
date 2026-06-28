@@ -103,7 +103,10 @@ def list_categories(
 def monthly(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    direction: Optional[str] = None,
+    category: Optional[str] = None,
     source: Optional[str] = None,
+    search: Optional[str] = None,
     repo: SQLiteRepository = Depends(get_repo),
 ):
     return {
@@ -111,6 +114,51 @@ def monthly(
         "months": repo.get_monthly_stats_range(
             start_date=start_date,
             end_date=end_date,
+            direction=direction,
+            category=category,
             source=source,
+            search=search,
         ),
     }
+
+
+@router.get("/income-by-source")
+def income_by_source(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    direction: Optional[str] = None,
+    category: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    items = repo.get_income_stats_by_source(
+        start_date=start_date,
+        end_date=end_date,
+        direction=direction,
+        category=category,
+        source=source,
+        search=search,
+    )
+    return {"items": items, "total": round(sum(item["amount"] for item in items), 2)}
+
+
+@router.get("/income-by-product")
+def income_by_product(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    direction: Optional[str] = None,
+    category: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    items = repo.get_income_stats_by_product(
+        start_date=start_date,
+        end_date=end_date,
+        direction=direction,
+        category=category,
+        source=source,
+        search=search,
+    )
+    return {"items": items, "total": round(sum(item["amount"] for item in items), 2)}
