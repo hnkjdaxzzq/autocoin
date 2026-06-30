@@ -9,13 +9,19 @@ class AlipayParser(BillParser):
     SOURCE_NAME = "alipay"
     DIRECTION_MAP = {"收入": "income", "支出": "expense", "不计收支": "neutral"}
     HEADER_SENTINEL = "交易时间"
+    ENCODINGS = ("utf-8-sig", "gbk", "gb18030")
+    TIME_FORMATS = (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+    )
 
     def can_parse(self, filename: str, file_bytes: bytes) -> bool:
         return filename.lower().endswith(".csv")
 
     def parse(self, file_bytes: bytes) -> list[ParsedTransaction]:
-        # Alipay exports are GBK encoded
-        text = file_bytes.decode("gbk", errors="replace")
+        text = self._decode(file_bytes)
         lines = text.splitlines()
 
         # Find the header row by scanning for the sentinel value
@@ -51,7 +57,7 @@ class AlipayParser(BillParser):
 
             time_str = row.get("交易时间", "").strip()
             try:
-                transaction_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                transaction_time = self._parse_time(time_str)
             except ValueError:
                 continue  # skip rows with unparseable datetime
 
@@ -77,3 +83,23 @@ class AlipayParser(BillParser):
             )
 
         return results
+
+    def _decode(self, file_bytes: bytes) -> str:
+        for encoding in self.ENCODINGS:
+            try:
+                text = file_bytes.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            if self.HEADER_SENTINEL in text:
+                return text
+
+        return file_bytes.decode("utf-8-sig", errors="replace")
+
+    def _parse_time(self, time_str: str) -> datetime:
+        for time_format in self.TIME_FORMATS:
+            try:
+                return datetime.strptime(time_str, time_format)
+            except ValueError:
+                continue
+
+        raise ValueError(f"Unsupported Alipay transaction time: {time_str}")

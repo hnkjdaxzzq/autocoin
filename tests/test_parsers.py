@@ -97,6 +97,32 @@ class TestAlipayParser:
         assert len(result) == 1
         assert result[0].counterparty == "滴滴"
 
+    def test_utf8_bom_export_with_slash_datetime(self):
+        buf = io.StringIO()
+        buf.write("导出信息：,,,,,,,,,,,\n")
+        buf.write("共1笔记录,,,,,,,,,,,\n")
+        writer = csv.writer(buf)
+        writer.writerow([
+            "交易时间", "交易分类", "交易对方", "对方账号", "商品说明",
+            "收/支", "金额", "收/付款方式", "交易状态", "交易订单号",
+            "商家订单号", "备注",
+        ])
+        writer.writerow([
+            "2026/6/30 19:17", "餐饮美食", "友宝", "sma***@ubox.cn",
+            "智能货柜消费", "支出", "5", "信用卡", "交易成功",
+            "2026063023001446421427443808\t", "visionpayDE7C4E32041D159F883CDAF4\t", "",
+        ])
+
+        parser = AlipayParser()
+        result = parser.parse(buf.getvalue().encode("utf-8-sig"))
+
+        assert len(result) == 1
+        assert result[0].source_order_id == "2026063023001446421427443808"
+        assert result[0].merchant_order_id == "visionpayDE7C4E32041D159F883CDAF4"
+        assert result[0].transaction_time == datetime(2026, 6, 30, 19, 17)
+        assert result[0].amount == 5.0
+        assert result[0].direction == "expense"
+
     def test_can_parse(self):
         parser = AlipayParser()
         assert parser.can_parse("test.csv", b"")
