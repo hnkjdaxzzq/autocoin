@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,13 +29,10 @@ DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用
 分类编号：
 {category_map}
 
-你的任务：把每一条交易都归类到上述分类编号中的某一个编号。你必须严格只使用列表中的编号，不允许输出列表外的编号、分类名称、同义词、近义词、变体或额外解释。
+任务：把每一条交易都归类到上述分类编号中的某一个编号。你必须严格只使用列表中的编号，不允许输出列表外的编号。
 
 重要规则：
 - 如果交易当前分类和某个用户分类接近但不完全一致，请映射到最接近的分类编号。
-- 示例：分类包含 1=餐饮，2=交通，current_category = "餐饮美食" → 必须输出编号 1。
-- 示例：分类包含 1=餐饮，2=交通，current_category = "打车" → 必须输出编号 2。
-- 示例：分类包含 1=购物，2=交通，current_category = "餐饮" → 必须选择最接近的一项，例如编号 1。
 - 永远不要输出分类编号列表之外的任何编号。
 - 每一条交易都必须给出一个分类编号，不能跳过。
 
@@ -109,6 +107,14 @@ def _preference_payload(body: AIClassificationPreferences) -> dict:
         "prompt_template": body.prompt_template or DEFAULT_PROMPT_TEMPLATE,
         "only_expense": body.only_expense,
     }
+
+
+def _parse_categories(categories: str) -> list[str]:
+    return [
+        c.strip()
+        for c in re.split(r"[,，]", categories or "")
+        if c.strip()
+    ]
 
 
 def _build_category_map(categories: list[str]) -> dict[int, str]:
@@ -454,8 +460,11 @@ def _classify_stream(
 
     yield _sse_event("complete", {
         "total": total,
+        "total_batches": total_batches,
         "classified": len(all_results),
         "changed": changed_count,
+        "failed_batches": failed_batches,
+        "failed_details": failed_details[-10:],
         "results": all_results,
     })
 
@@ -467,7 +476,7 @@ def classify_transactions(
     _: User = Depends(get_current_user),
 ):
     """Use DeepSeek API to classify all transactions. Returns SSE stream."""
-    categories = [c.strip() for c in body.categories.split(",") if c.strip()]
+    categories = _parse_categories(body.categories)
     if not categories:
         raise HTTPException(status_code=422, detail="请至少填写一个分类")
 

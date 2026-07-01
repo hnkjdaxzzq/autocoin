@@ -10,6 +10,7 @@ from autocoin.routers.ai_classification import (
     DEFAULT_PROMPT_TEMPLATE,
     _filter_classifiable_transactions,
     _normalize_ai_result_item,
+    _parse_categories,
     _render_prompt_template,
     _summarize_error,
 )
@@ -304,6 +305,11 @@ class TestAIClassificationPreferences:
         assert _normalize_ai_result_item({"id": 9, "category": "餐饮"}, category_map) == (None, "")
         assert _normalize_ai_result_item([10, "购物"], category_map) == (None, "")
         assert _normalize_ai_result_item([11, "PULSE交易"], category_map) == (None, "")
+
+    def test_parse_categories_supports_chinese_and_english_commas(self):
+        categories = _parse_categories("餐饮美食，交通出行, 汽车，母婴儿童")
+
+        assert categories == ["餐饮美食", "交通出行", "汽车", "母婴儿童"]
 
     def test_summarize_error_redacts_and_truncates(self):
         summary = _summarize_error(RuntimeError("bad key sk-secret-value " + ("x" * 300)))

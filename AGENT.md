@@ -396,7 +396,7 @@ autocoin-t/
 - 使用 **DeepSeek API**，通过 SSE 流式推送进度
 - 用户输入分类列表（逗号分隔），AI 将所有交易强制归入这些分类
 - 分类列表、DeepSeek API key、AI Prompt 模板、是否仅处理支出数据保存于 `user_preferences`，偏好 key 为 `ai_classification.preferences`
-- AI Prompt 默认展开展示，默认模板保留完整中文分类规则和示例；接口协议部分使用 `{category_map}`、`{transactions}`
+- AI Prompt 默认展开展示，默认模板为中文精简分类规则；接口协议部分使用 `{category_map}`、`{transactions}`
 - 偏好接口返回 `default_prompt_template`，前端“重置为默认Prompt”按钮用它恢复文本框内容
 - “重置为默认Prompt”右侧的“本次最多处理”是 `/classify` 的一次性 `limit` 参数，`0` 表示不限制，不写入 `user_preferences`
 - 默认输入协议使用分类编号和紧凑交易行：`id|当前分类|交易对方|商品说明`；不发送备注、金额、时间、订单号等其他字段
