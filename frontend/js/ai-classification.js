@@ -5,9 +5,11 @@ const AiClassification = {
     previewPageSize: 50,
     allResults: [],
     filteredResults: [],
+    promptExpanded: false,
   },
 
   render(container) {
+    AiClassification._state.promptExpanded = false;
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">AI分析</h1>
@@ -51,6 +53,24 @@ const AiClassification = {
             请填写Deepseek官方网站里的API key
           </div>
         </div>
+
+        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+          <button id="ai-prompt-toggle" type="button" aria-expanded="false"
+            style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0;
+                   border:0;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer">
+            <span>AI Prompt</span>
+            <span id="ai-prompt-toggle-icon" style="font-size:16px;color:var(--text-muted)">▸</span>
+          </button>
+          <div id="ai-prompt-panel" style="display:none;margin-top:10px">
+            <textarea id="ai-prompt-template" class="ai-input" rows="16"
+              style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                     font-size:13px;background:var(--input-bg);color:var(--text);
+                     font-family:monospace;line-height:1.5;resize:vertical"></textarea>
+            <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
+              可使用 {categories} 表示分类列表，{transactions} 表示本批交易数据。
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="ai-status"></div>
@@ -58,6 +78,7 @@ const AiClassification = {
     `;
 
     AiClassification._bindEvents(container);
+    AiClassification._loadPreferences(container);
   },
 
   _bindEvents(container) {
@@ -71,11 +92,43 @@ const AiClassification = {
     container.querySelector("#ai-api-key").addEventListener("keydown", (e) => {
       if (e.key === "Enter") btn.click();
     });
+
+    container.querySelector("#ai-prompt-toggle").addEventListener("click", () => {
+      AiClassification._setPromptExpanded(
+        container,
+        !AiClassification._state.promptExpanded,
+      );
+    });
+  },
+
+  async _loadPreferences(container) {
+    try {
+      const prefs = await API.aiClassification.getPreferences();
+      const categoriesEl = container.querySelector("#ai-categories");
+      const apiKeyEl = container.querySelector("#ai-api-key");
+      const promptEl = container.querySelector("#ai-prompt-template");
+      if (categoriesEl) categoriesEl.value = prefs.categories || "";
+      if (apiKeyEl) apiKeyEl.value = prefs.api_key || "";
+      if (promptEl) promptEl.value = prefs.prompt_template || "";
+    } catch (err) {
+      AiClassification._showToast("读取 AI 配置失败: " + err.message);
+    }
+  },
+
+  _setPromptExpanded(container, expanded) {
+    AiClassification._state.promptExpanded = expanded;
+    const panel = container.querySelector("#ai-prompt-panel");
+    const toggle = container.querySelector("#ai-prompt-toggle");
+    const icon = container.querySelector("#ai-prompt-toggle-icon");
+    if (panel) panel.style.display = expanded ? "block" : "none";
+    if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (icon) icon.textContent = expanded ? "▾" : "▸";
   },
 
   async _startClassification(container) {
     const categories = container.querySelector("#ai-categories").value.trim();
     const apiKey = container.querySelector("#ai-api-key").value.trim();
+    const promptTemplate = container.querySelector("#ai-prompt-template").value.trim();
 
     if (!categories) {
       AiClassification._showToast("请填写分类");
@@ -131,6 +184,7 @@ const AiClassification = {
         body: JSON.stringify({
           api_key: apiKey,
           categories: categories,
+          prompt_template: promptTemplate,
         }),
         signal: controller.signal,
       });

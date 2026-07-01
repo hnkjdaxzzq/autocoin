@@ -489,6 +489,13 @@ const API = {
       )),
   },
   aiClassification: {
+    getPreferences: () => apiFetch("/ai-classification/preferences"),
+    savePreferences: (body) =>
+      apiFetch("/ai-classification/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
     classify: (body, signal) =>
       apiFetch("/ai-classification/classify", {
         method: "POST",

@@ -331,6 +331,8 @@ autocoin-t/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/ai-classification/preferences` | 获取 AI 自动分类用户偏好（分类列表、DeepSeek API key、Prompt 模板） |
+| PUT | `/ai-classification/preferences` | 更新 AI 自动分类用户偏好 |
 | POST | `/ai-classification/classify` | 调用 DeepSeek API 进行 AI 自动分类（SSE 流式返回进度） |
 | POST | `/ai-classification/confirm` | 确认并写入 AI 分类结果 |
 
@@ -393,8 +395,13 @@ autocoin-t/
 
 - 使用 **DeepSeek API**，通过 SSE 流式推送进度
 - 用户输入分类列表（逗号分隔），AI 将所有交易强制归入这些分类
+- 分类列表、DeepSeek API key、AI Prompt 模板保存于 `user_preferences`，偏好 key 为 `ai_classification.preferences`
+- AI Prompt 默认折叠展示，默认模板是中文完整提示词，也是后端发送给 DeepSeek 的真实用户消息模板；执行时替换 `{categories}` 和 `{transactions}`
+- `{transactions}` 仅包含交易 `id`、当前分类、交易对方、商品说明；不发送备注、金额、时间、订单号等其他字段
+- 交易方向为“不计”的数据不参与 AI 自动分类；后端过滤 `neutral`、`不计`、`不计收支`
+- `/ai-classification/classify` 执行前会保存本次提交的分类列表、API key 和 Prompt 模板，并按用户模板调用 DeepSeek
 - 分批处理（每批 100 条，最多 5 并发线程，3 次重试，超时 600 秒）
-- 严格提示词确保 AI 只输出指定分类
+- 默认严格提示词确保 AI 只输出指定分类；用户自定义 Prompt 后以后端收到的模板为准
 - 预览差异后用户确认才写入数据库
 
 ### 6.5 数据备份还原

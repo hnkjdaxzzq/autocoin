@@ -2,8 +2,6 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
@@ -23,17 +21,52 @@ BATCH_SIZE = 100
 MAX_WORKERS = 5
 MAX_RETRIES = 3
 RETRY_DELAY = 2
+PREF_KEY_AI_CLASSIFICATION = "ai_classification.preferences"
+
+DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用户指定的全部可用分类只有：[{categories}]。
+
+你的任务：把每一条交易都归类到上述分类列表中的某一个分类。你必须严格只使用列表中的原始分类名称，不允许输出列表外的分类，不允许输出同义词、近义词、变体或额外解释。
+
+重要规则：
+- 如果交易当前分类和用户分类列表中的某一项接近但不完全一致，请映射到列表中最接近的一项。
+- 示例：用户分类 = [餐饮,交通]，current_category = "餐饮美食" → 必须输出 "餐饮"
+- 示例：用户分类 = [餐饮,交通]，current_category = "打车" → 必须输出 "交通"
+- 示例：用户分类 = [购物,交通]，current_category = "餐饮" → 必须选择最接近的一项，例如 "购物"
+- 永远不要输出用户分类列表之外的任何分类。
+- 每一条交易都必须给出一个分类，不能跳过。
+
+请为每一条交易返回一个 JSON 对象，根字段必须是 "transactions"，其值是数组。数组中每个对象必须包含：
+- "id"：整数，原交易 id
+- "category"：字符串，必须是 [{categories}] 中的某一个原始分类名称
+
+待分类交易如下，每行都包含当前分类、交易对方和商品说明供参考：
+{transactions}
+
+只返回合法 JSON 对象，不要返回 Markdown，不要返回代码块，不要返回任何额外文字。"""
+
+DEFAULT_AI_CLASSIFICATION_PREFERENCES = {
+    "categories": "",
+    "api_key": "",
+    "prompt_template": DEFAULT_PROMPT_TEMPLATE,
+}
 
 
 class ClassifyRequest(BaseModel):
     api_key: str
     categories: str  # comma-separated, e.g. "美食,交通,旅游"
+    prompt_template: str = DEFAULT_PROMPT_TEMPLATE
 
 
 class ClassifyResponse(BaseModel):
     total: int
     classified: int
     results: list[dict]
+
+
+class AIClassificationPreferences(BaseModel):
+    categories: str = ""
+    api_key: str = ""
+    prompt_template: str = DEFAULT_PROMPT_TEMPLATE
 
 
 class ConfirmRequest(BaseModel):
@@ -52,47 +85,86 @@ def get_repo(
     return SQLiteRepository(db, user.id)
 
 
-def _build_batch_prompt(transactions: list[dict], categories: list[str]) -> str:
-    """Build a prompt for classifying a batch of transactions."""
-    cats_str = ", ".join(categories)
+def _normalize_preferences(value) -> AIClassificationPreferences:
+    if not isinstance(value, dict):
+        value = {}
+    return AIClassificationPreferences(
+        categories=value.get("categories") or "",
+        api_key=value.get("api_key") or "",
+        prompt_template=value.get("prompt_template") or DEFAULT_PROMPT_TEMPLATE,
+    )
+
+
+def _preference_payload(body: AIClassificationPreferences) -> dict:
+    return {
+        "categories": body.categories,
+        "api_key": body.api_key,
+        "prompt_template": body.prompt_template or DEFAULT_PROMPT_TEMPLATE,
+    }
+
+
+def _build_transaction_prompt_lines(transactions: list[dict]) -> str:
     lines = []
     for tx in transactions:
         counterparty = tx.get("counterparty") or ""
         product = tx.get("product") or ""
-        remark = tx.get("remark") or ""
         old_cat = tx.get("category") or ""
         lines.append(
-            f'id={tx["id"]}, current_category="{old_cat}", counterparty="{counterparty}", product="{product}", remark="{remark}"'
+            f'id={tx["id"]}, current_category="{old_cat}", counterparty="{counterparty}", product="{product}"'
         )
-    tx_list = "\n".join(lines)
+    return "\n".join(lines)
 
-    return f"""You are a strict transaction classifier. The user has specified EXACTLY these categories: [{cats_str}].
 
-Your task: Assign EVERY transaction to ONE of these exact category strings. You must STRICTLY use only the strings from the list above — nothing else, no variations, no synonyms.
+def _filter_classifiable_transactions(transactions: list[dict]) -> list[dict]:
+    """Exclude transactions that should not participate in AI classification."""
+    neutral_values = {"neutral", "不计", "不计收支"}
+    return [
+        tx for tx in transactions
+        if (tx.get("direction") or "").strip() not in neutral_values
+    ]
 
-Important rules:
-- If a transaction's current category is close to but not exactly one of the user's categories, map it to the closest match from the list.
-- Example: user categories = [餐饮,交通], current_category = "餐饮美食" → must map to "餐饮"
-- Example: user categories = [餐饮,交通], current_category = "打车" → must map to "交通"
-- Example: user categories = [购物,交通], current_category = "餐饮" → must map to the closest match (购物)
-- NEVER output a category that is not in the user's list.
-- EVERY transaction must get a category — no skipping.
 
-For each transaction, respond with a JSON object containing a "transactions" key, whose value is an array of objects, each with fields "id" (integer) and "category" (string — must be one of [{cats_str}]).
+def _render_prompt_template(
+    prompt_template: str,
+    transactions: list[dict],
+    categories: list[str],
+) -> str:
+    """Render the user-configured prompt template for a transaction batch."""
+    template = prompt_template or DEFAULT_PROMPT_TEMPLATE
+    return (
+        template
+        .replace("{categories}", ", ".join(categories))
+        .replace("{transactions}", _build_transaction_prompt_lines(transactions))
+    )
 
-Transactions to classify (each includes current_category for reference):
-{tx_list}
 
-Return ONLY a valid JSON object containing the "transactions" array. No other text."""
+@router.get("/preferences", response_model=AIClassificationPreferences)
+def get_ai_classification_preferences(repo: SQLiteRepository = Depends(get_repo)):
+    prefs = repo.get_user_preference(
+        PREF_KEY_AI_CLASSIFICATION,
+        DEFAULT_AI_CLASSIFICATION_PREFERENCES,
+    )
+    return _normalize_preferences(prefs)
+
+
+@router.put("/preferences", response_model=AIClassificationPreferences)
+def update_ai_classification_preferences(
+    body: AIClassificationPreferences,
+    repo: SQLiteRepository = Depends(get_repo),
+):
+    normalized = _normalize_preferences(_preference_payload(body))
+    repo.set_user_preference(PREF_KEY_AI_CLASSIFICATION, normalized.model_dump())
+    return normalized
 
 
 def _classify_batch(
     api_key: str,
     transactions: list[dict],
     categories: list[str],
+    prompt_template: str,
 ) -> list[dict]:
     """Send one batch of transactions to DeepSeek for classification."""
-    prompt = _build_batch_prompt(transactions, categories)
+    prompt = _render_prompt_template(prompt_template, transactions, categories)
 
     for attempt in range(MAX_RETRIES):
         try:
@@ -183,6 +255,7 @@ def _sse_event(event: str, data: object) -> str:
 def _classify_stream(
     api_key: str,
     categories: list[str],
+    prompt_template: str,
     repo: SQLiteRepository,
 ):
     """Generator that yields SSE progress events and a final complete event."""
@@ -192,7 +265,9 @@ def _classify_stream(
         "message": "正在读取数据库中的交易数据...",
     })
 
-    all_tx, total = repo.list_transactions(page=1, page_size=1000000)
+    all_tx, _ = repo.list_transactions(page=1, page_size=1000000)
+    all_tx = _filter_classifiable_transactions(all_tx)
+    total = len(all_tx)
     if not all_tx:
         yield _sse_event("complete", {
             "total": 0,
@@ -223,7 +298,13 @@ def _classify_stream(
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_map = {
-            executor.submit(_classify_batch, api_key, batch, categories): batch
+            executor.submit(
+                _classify_batch,
+                api_key,
+                batch,
+                categories,
+                prompt_template,
+            ): batch
             for batch in batches
         }
         try:
@@ -296,8 +377,15 @@ def classify_transactions(
     if not categories:
         raise HTTPException(status_code=422, detail="请至少填写一个分类")
 
+    prompt_template = body.prompt_template or DEFAULT_PROMPT_TEMPLATE
+    repo.set_user_preference(PREF_KEY_AI_CLASSIFICATION, {
+        "categories": body.categories,
+        "api_key": body.api_key,
+        "prompt_template": prompt_template,
+    })
+
     return StreamingResponse(
-        _classify_stream(body.api_key, categories, repo),
+        _classify_stream(body.api_key, categories, prompt_template, repo),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

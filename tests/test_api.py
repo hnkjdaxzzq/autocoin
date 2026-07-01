@@ -6,6 +6,11 @@ to a temp directory BEFORE any autocoin modules are imported.
 import pytest
 from fastapi.testclient import TestClient
 
+from autocoin.routers.ai_classification import (
+    DEFAULT_PROMPT_TEMPLATE,
+    _filter_classifiable_transactions,
+    _render_prompt_template,
+)
 from autocoin.app import create_app
 from tests.test_parsers import _make_alipay_csv, _make_cmb_securities_xls
 
@@ -152,6 +157,108 @@ class TestAuth:
             "new_password": "abcdefghijk",
         })
         assert resp.status_code == 422
+
+
+class TestAIClassificationPreferences:
+    def _register_headers(self, client, username):
+        resp = client.post("/api/v1/auth/register", json={
+            "username": username,
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert resp.status_code == 201
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    def test_default_preferences(self, client):
+        headers = self._register_headers(client, "aiprefsdefault")
+
+        resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["categories"] == ""
+        assert data["api_key"] == ""
+        assert data["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+
+    def test_update_preferences_is_user_scoped(self, client):
+        headers = self._register_headers(client, "aiprefsowner")
+        other_headers = self._register_headers(client, "aiprefsother")
+        payload = {
+            "categories": "餐饮,交通",
+            "api_key": "sk-owner",
+            "prompt_template": "分类: {categories}\n交易: {transactions}",
+        }
+
+        resp = client.put(
+            "/api/v1/ai-classification/preferences",
+            headers=headers,
+            json=payload,
+        )
+        assert resp.status_code == 200
+        assert resp.json() == payload
+
+        owner_resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
+        other_resp = client.get("/api/v1/ai-classification/preferences", headers=other_headers)
+
+        assert owner_resp.json() == payload
+        assert other_resp.json()["categories"] == ""
+        assert other_resp.json()["api_key"] == ""
+        assert other_resp.json()["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+
+    def test_classify_accepts_prompt_template_and_saves_preferences(self, client):
+        headers = self._register_headers(client, "aiprefsclassify")
+        payload = {
+            "categories": "餐饮,交通",
+            "api_key": "sk-classify",
+            "prompt_template": "只返回 JSON。分类: {categories}\n交易:\n{transactions}",
+        }
+
+        resp = client.post(
+            "/api/v1/ai-classification/classify",
+            headers=headers,
+            json=payload,
+        )
+
+        assert resp.status_code == 200
+        assert '"total": 0' in resp.text
+        prefs_resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
+        assert prefs_resp.status_code == 200
+        assert prefs_resp.json() == payload
+
+    def test_render_prompt_template_replaces_variables(self):
+        prompt = _render_prompt_template(
+            "分类={categories}\n数据={transactions}",
+            [{
+                "id": 7,
+                "category": "旧分类",
+                "counterparty": "商户",
+                "product": "商品",
+                "remark": "备注",
+            }],
+            ["餐饮", "交通"],
+        )
+
+        assert "分类=餐饮, 交通" in prompt
+        assert 'id=7, current_category="旧分类"' in prompt
+        assert 'counterparty="商户"' in prompt
+        assert 'product="商品"' in prompt
+        assert "备注" not in prompt
+        assert "remark" not in prompt
+        assert "{categories}" not in prompt
+        assert "{transactions}" not in prompt
+
+    def test_filter_classifiable_transactions_excludes_neutral_direction(self):
+        transactions = [
+            {"id": 1, "direction": "expense"},
+            {"id": 2, "direction": "income"},
+            {"id": 3, "direction": "neutral"},
+            {"id": 4, "direction": "不计"},
+            {"id": 5, "direction": "不计收支"},
+        ]
+
+        filtered = _filter_classifiable_transactions(transactions)
+
+        assert [tx["id"] for tx in filtered] == [1, 2]
 
 
 class TestTransactions:
