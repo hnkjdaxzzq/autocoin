@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from autocoin.routers.ai_classification import (
+    DEFAULT_CATEGORIES,
     DEFAULT_PROMPT_TEMPLATE,
     _filter_classifiable_transactions,
     _normalize_ai_result_item,
@@ -179,7 +180,7 @@ class TestAIClassificationPreferences:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["categories"] == ""
+        assert data["categories"] == DEFAULT_CATEGORIES
         assert data["api_key"] == ""
         assert data["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
         assert data["only_expense"] is True
@@ -213,7 +214,7 @@ class TestAIClassificationPreferences:
         for key, value in payload.items():
             assert owner_data[key] == value
         assert owner_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
-        assert other_resp.json()["categories"] == ""
+        assert other_resp.json()["categories"] == DEFAULT_CATEGORIES
         assert other_resp.json()["api_key"] == ""
         assert other_resp.json()["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
         assert other_resp.json()["only_expense"] is True

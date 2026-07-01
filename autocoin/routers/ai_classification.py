@@ -24,6 +24,7 @@ MAX_WORKERS = 5
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 PREF_KEY_AI_CLASSIFICATION = "ai_classification.preferences"
+DEFAULT_CATEGORIES = "餐饮美食，交通出行，汽车，母婴儿童，娱乐，购物，生活缴费，社保费用，医疗，旅游，其他"
 
 DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用户指定的全部可用分类如下，左侧是分类编号，右侧是分类名称：
 
@@ -44,7 +45,7 @@ DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用
 不要返回 Markdown，不要返回代码块，不要返回任何额外文字。"""
 
 DEFAULT_AI_CLASSIFICATION_PREFERENCES = {
-    "categories": "",
+    "categories": DEFAULT_CATEGORIES,
     "api_key": "",
     "prompt_template": DEFAULT_PROMPT_TEMPLATE,
     "only_expense": True,
@@ -69,7 +70,7 @@ class ClassifyResponse(BaseModel):
 
 
 class AIClassificationPreferences(BaseModel):
-    categories: str = ""
+    categories: str = DEFAULT_CATEGORIES
     api_key: str = ""
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     only_expense: bool = True
@@ -103,7 +104,7 @@ def _normalize_preferences(value) -> AIClassificationPreferences:
     if not isinstance(value, dict):
         value = {}
     return AIClassificationPreferences(
-        categories=value.get("categories") or "",
+        categories=value.get("categories") or DEFAULT_CATEGORIES,
         api_key=value.get("api_key") or "",
         prompt_template=value.get("prompt_template") or DEFAULT_PROMPT_TEMPLATE,
         only_expense=value.get("only_expense", True) is not False,

@@ -9,6 +9,7 @@ const AiClassification = {
     promptExpanded: true,
     dateRangeExpanded: false,
     defaultPromptTemplate: "",
+    defaultCategories: "餐饮美食，交通出行，汽车，母婴儿童，娱乐，购物，生活缴费，社保费用，医疗，旅游，其他",
   },
 
   render(container) {
@@ -27,7 +28,8 @@ const AiClassification = {
             使用AI将数据做以下分类
           </label>
           <input type="text" id="ai-categories" class="ai-input"
-            placeholder="美食, 交通, 旅游, 购物, 住房, 娱乐"
+            value="${AiClassification._state.defaultCategories}"
+            placeholder="${AiClassification._state.defaultCategories}"
             style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
                    font-size:14px;background:var(--input-bg);color:var(--text)">
           <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
@@ -182,7 +184,7 @@ const AiClassification = {
       const promptEl = container.querySelector("#ai-prompt-template");
       const onlyExpenseEl = container.querySelector("#ai-only-expense");
       AiClassification._state.defaultPromptTemplate = prefs.default_prompt_template || "";
-      if (categoriesEl) categoriesEl.value = prefs.categories || "";
+      if (categoriesEl) categoriesEl.value = prefs.categories || AiClassification._state.defaultCategories;
       if (apiKeyEl) apiKeyEl.value = prefs.api_key || "";
       if (promptEl) promptEl.value = prefs.prompt_template || "";
       if (onlyExpenseEl) onlyExpenseEl.checked = prefs.only_expense !== false;
