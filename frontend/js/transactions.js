@@ -449,7 +449,7 @@ const Transactions = {
           </tr>
         </thead>
         <tbody>
-          ${data.items.map(tx => `
+          ${data.items.map((tx, idx) => `
             <tr data-id="${tx.id}">
               <td><input type="checkbox" class="tx-row-check" data-id="${tx.id}" ${Transactions._state.selectedIds.has(tx.id) ? "checked" : ""}></td>
               <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
@@ -478,10 +478,21 @@ const Transactions = {
               </td>
               <td>
                 <div class="tx-actions">
-                <button class="btn btn-danger btn-sm btn-delete" data-id="${tx.id}"
-                  style="padding:2px 8px;font-size:12px">删除</button>
                   <button class="btn btn-ghost btn-sm btn-neutral" data-id="${tx.id}"
+                    data-remark="${encodeURIComponent(tx.remark || "")}"
                     style="padding:2px 8px;font-size:12px">不计</button>
+                  <div class="tx-row-menu ${idx >= data.items.length - 2 ? "drop-up" : ""}">
+                    <button class="tx-row-menu-toggle" type="button" aria-label="更多操作" title="更多操作" data-id="${tx.id}">
+                      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="12" cy="5" r="2"></circle>
+                        <circle cx="12" cy="12" r="2"></circle>
+                        <circle cx="12" cy="19" r="2"></circle>
+                      </svg>
+                    </button>
+                    <div class="tx-row-menu-popover">
+                      <button class="tx-row-menu-item danger btn-delete" type="button" data-id="${tx.id}">删除</button>
+                    </div>
+                  </div>
                 </div>
               </td>
             </tr>`).join("")}
@@ -532,7 +543,22 @@ const Transactions = {
       });
     });
 
-    // Bind delete buttons
+    // Bind row action menus
+    wrap.querySelectorAll(".tx-row-menu-toggle").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = btn.closest(".tx-row-menu");
+        wrap.querySelectorAll(".tx-row-menu.open").forEach(openMenu => {
+          if (openMenu !== menu) openMenu.classList.remove("open");
+        });
+        menu.classList.toggle("open");
+      });
+    });
+    wrap.addEventListener("click", () => {
+      wrap.querySelectorAll(".tx-row-menu.open").forEach(menu => menu.classList.remove("open"));
+    });
+
+    // Bind delete menu items
     wrap.querySelectorAll(".btn-delete").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!confirm("确认删除这条账单记录？")) return;
@@ -549,7 +575,11 @@ const Transactions = {
     wrap.querySelectorAll(".btn-neutral").forEach(btn => {
       btn.addEventListener("click", async () => {
         try {
-          await API.transactions.update(parseInt(btn.dataset.id), { direction: "neutral" });
+          const remark = decodeURIComponent(btn.dataset.remark || "");
+          await API.transactions.update(parseInt(btn.dataset.id), {
+            direction: "neutral",
+            remark: `手动改为不计|${remark}`,
+          });
           Transactions._load(container);
         } catch (err) {
           alert("更新失败: " + err.message);

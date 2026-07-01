@@ -79,7 +79,7 @@ function updateAdvancedNav(route) {
   const group = document.getElementById("advanced-nav-group");
   const toggle = document.getElementById("advanced-nav-toggle");
   if (!group || !toggle) return;
-  const advancedRoutes = ["/special-data-processing", "/data-management"];
+  const advancedRoutes = ["/rules", "/special-data-processing", "/data-management"];
   const isAdvancedRoute = advancedRoutes.includes(route);
   group.classList.toggle("open", isAdvancedRoute || group.classList.contains("open"));
   toggle.classList.toggle("active", isAdvancedRoute);

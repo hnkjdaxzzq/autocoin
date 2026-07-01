@@ -204,6 +204,16 @@ body {
   margin: 2px 0;
   padding: 8px 12px;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nav-submenu-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: .82;
 }
 
 #sidebar .nav-submenu a.active::before {
@@ -544,6 +554,87 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   justify-content: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+.tx-row-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tx-row-menu-toggle {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.tx-row-menu-toggle:hover,
+.tx-row-menu.open .tx-row-menu-toggle {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+.tx-row-menu-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tx-row-menu-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 86px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+}
+
+.tx-row-menu.drop-up .tx-row-menu-popover {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.tx-row-menu.open .tx-row-menu-popover {
+  display: block;
+}
+
+.tx-row-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tx-row-menu-item:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.tx-row-menu-item.danger {
+  color: var(--expense);
+}
+
+.tx-row-menu-item.danger:hover {
+  background: rgba(239, 68, 68, .1);
+  color: var(--expense);
 }
 
 .tx-row-deleted td {
