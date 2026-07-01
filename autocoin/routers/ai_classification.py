@@ -57,6 +57,7 @@ class ClassifyRequest(BaseModel):
     categories: str  # comma-separated, e.g. "美食,交通,旅游"
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     only_expense: bool = True
+    limit: int = 0
 
 
 class ClassifyResponse(BaseModel):
@@ -169,27 +170,17 @@ def _render_prompt_template(
 
 def _find_transactions_result(parsed):
     if isinstance(parsed, dict):
-        for key in ("t", "transactions", "results", "data", "classifications"):
-            if key in parsed and isinstance(parsed[key], list):
-                return parsed[key]
-    if isinstance(parsed, list):
-        return parsed
+        result = parsed.get("t")
+        if isinstance(result, list):
+            return result
     return None
 
 
 def _normalize_ai_result_item(item, category_map: dict[int, str]) -> tuple:
-    if isinstance(item, (list, tuple)) and len(item) >= 2:
-        tid = item[0]
-        category_value = item[1]
-    elif isinstance(item, dict):
-        tid = item.get("id")
-        category_value = item.get("category")
-        if category_value is None:
-            category_value = item.get("category_id")
-        if category_value is None:
-            category_value = item.get("c")
-    else:
+    if not isinstance(item, (list, tuple)) or len(item) < 2:
         return None, ""
+    tid = item[0]
+    category_value = item[1]
 
     try:
         tid = int(tid)
@@ -202,8 +193,19 @@ def _normalize_ai_result_item(item, category_map: dict[int, str]) -> tuple:
         cat = category_value.strip()
         if cat.isdigit():
             return tid, category_map.get(int(cat), "")
-        return tid, cat
     return None, ""
+
+
+def _summarize_error(error: Exception) -> str:
+    raw = str(error).strip() or error.__class__.__name__
+    text = " ".join(raw.split())
+    sensitive_markers = ("sk-", "Bearer ")
+    for marker in sensitive_markers:
+        if marker in text:
+            text = text.split(marker)[0] + marker + "***"
+    if len(text) > 240:
+        text = text[:237] + "..."
+    return text
 
 
 @router.get("/preferences", response_model=AIClassificationPreferences)
@@ -268,6 +270,8 @@ def _classify_batch(
             # Validate and map results
             tx_map = {tx["id"]: tx for tx in transactions}
             validated = []
+            invalid_count = 0
+            invalid_examples = []
             for item in transactions_result:
                 tid, cat = _normalize_ai_result_item(item, category_map)
                 if tid and cat and tid in tx_map:
@@ -280,8 +284,25 @@ def _classify_batch(
                         "transaction_time": tx_map[tid].get("transaction_time") or "",
                     })
                     del tx_map[tid]  # remove from pending
+                else:
+                    invalid_count += 1
+                    if len(invalid_examples) < 3:
+                        invalid_examples.append(str(item)[:120])
 
-            # Fill in any records DeepSeek missed with original category
+            if invalid_count:
+                examples = "；".join(invalid_examples)
+                raise ValueError(
+                    f"AI returned {invalid_count} invalid classification item(s), examples: {examples}"
+                )
+            if tx_map:
+                missing_ids = list(tx_map.keys())[:5]
+                raise ValueError(
+                    f"AI missed {len(tx_map)} transaction(s), sample ids: {missing_ids}"
+                )
+
+            # Fill in any records DeepSeek missed with original category.
+            # This is kept as a defensive fallback, but tx_map should be empty
+            # because missing records are treated as batch failures above.
             for tid, tx in tx_map.items():
                 validated.append({
                     "id": tid,
@@ -317,6 +338,7 @@ def _classify_stream(
     categories: list[str],
     prompt_template: str,
     only_expense: bool,
+    limit: int,
     repo: SQLiteRepository,
 ):
     """Generator that yields SSE progress events and a final complete event."""
@@ -328,6 +350,8 @@ def _classify_stream(
 
     all_tx, _ = repo.list_transactions(page=1, page_size=1000000)
     all_tx = _filter_classifiable_transactions(all_tx, only_expense=only_expense)
+    if limit > 0:
+        all_tx = all_tx[:limit]
     total = len(all_tx)
     if not all_tx:
         yield _sse_event("complete", {
@@ -356,6 +380,7 @@ def _classify_stream(
     CLASSIFY_TIMEOUT = 600
     completed = 0
     failed_batches = 0
+    failed_details = []
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_map = {
@@ -378,6 +403,12 @@ def _classify_stream(
                     failed_batches += 1
                     logger.error("Batch %d/%d failed: %s", completed, total_batches, e)
                     failed_batch = future_map[future]
+                    failed_details.append({
+                        "batch": completed,
+                        "total_batches": total_batches,
+                        "count": len(failed_batch),
+                        "reason": _summarize_error(e),
+                    })
                     for tx in failed_batch:
                         all_results.append({
                             "id": tx["id"],
@@ -395,6 +426,7 @@ def _classify_stream(
                     "completed_batches": completed,
                     "classified_so_far": len(all_results),
                     "failed_batches": failed_batches,
+                    "failed_details": failed_details[-10:],
                     "message": f"正在分类... 已完成 {completed}/{total_batches} 批，已处理 {len(all_results)}/{total} 条",
                 })
 
@@ -412,6 +444,7 @@ def _classify_stream(
                 "phase": "timeout",
                 "total": total,
                 "classified_so_far": len(all_results),
+                "failed_details": failed_details[-10:],
                 "message": f"处理超时，已部分完成 {len(all_results)}/{total} 条",
             })
 
@@ -452,6 +485,7 @@ def classify_transactions(
             categories,
             prompt_template,
             body.only_expense,
+            max(body.limit, 0),
             repo,
         ),
         media_type="text/event-stream",

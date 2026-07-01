@@ -25,8 +25,9 @@ AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列�
 - `PUT /api/v1/ai-classification/preferences`
   - 保存当前用户的三项配置。
 - `POST /api/v1/ai-classification/classify`
-  - 请求体包含 `api_key`、`categories`、`prompt_template`、`only_expense`。
+  - 请求体包含 `api_key`、`categories`、`prompt_template`、`only_expense`、`limit`。
   - 执行前先保存这些配置，然后通过 SSE 流式返回分类进度和结果。
+  - `limit` 是一次性运行参数，默认 `0` 表示不限制；大于 `0` 时只处理筛选后的前 N 条交易，不保存到用户偏好。
 
 ## Prompt 模板规则
 
@@ -34,9 +35,9 @@ AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列�
 
 - `{category_map}`：执行时替换为分类编号映射，例如 `1=餐饮`。
 - `{transactions}`：执行时替换为当前批次交易数据，每行格式为 `id|当前分类|交易对方|商品说明`，不包含备注。
-- `{categories}`：保留兼容变量，替换为逗号分隔分类列表。
+- `{categories}`：可选变量，替换为逗号分隔分类列表；默认 Prompt 不使用它。
 
-默认要求 DeepSeek 返回紧凑 JSON：`{"t":[[id,分类编号]]}`。后端会把分类编号映射回分类名称，同时兼容旧格式 `transactions`、`results`、`data`、`classifications` 以及 `{"id": 1, "category": "餐饮"}`。
+默认要求 DeepSeek 返回紧凑 JSON：`{"t":[[id,分类编号]]}`。后端只支持该协议，不兼容旧格式 `transactions`、`results`、`data`、`classifications`，也不接受 `{"id": 1, "category": "餐饮"}` 或字符串分类。若 AI 返回 `PULSE交易`、原分类、整段分类列表等越界值，或漏返交易，后端会判定该批无效并进入重试/失败流程。
 
 执行分类时，后端只按用户保存或本次提交的模板做变量替换，不再额外拼接旧版硬编码 Prompt。如果用户删除变量，后端也不会强行补回。
 
@@ -49,7 +50,9 @@ AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列�
 - AI Prompt 位于 AI 自动分类模块底部，默认展开。
 - 点击 `AI Prompt` 标题可展开或折叠文本框。
 - AI Prompt 文本框下方有“重置为默认Prompt”按钮，点击后将文本框内容恢复为后端返回的 `default_prompt_template`。
+- “重置为默认Prompt”右侧有“本次最多处理”数字输入框，默认 `0` 表示不限制；该值只影响当次分类请求，不会持久化。
 - 点击“AI自动分类”时提交当前配置，并由后端保存后执行。
+- 分类进度中如果有批次失败，后端会通过 SSE 返回最近失败详情，前端展示批次号、该批条数和错误摘要。错误摘要会截断并对常见密钥片段做脱敏。
 
 ## 后续修改注意
 

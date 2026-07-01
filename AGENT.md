@@ -396,13 +396,15 @@ autocoin-t/
 - 使用 **DeepSeek API**，通过 SSE 流式推送进度
 - 用户输入分类列表（逗号分隔），AI 将所有交易强制归入这些分类
 - 分类列表、DeepSeek API key、AI Prompt 模板、是否仅处理支出数据保存于 `user_preferences`，偏好 key 为 `ai_classification.preferences`
-- AI Prompt 默认展开展示，默认模板保留完整中文分类规则和示例；接口协议部分使用 `{category_map}`、`{transactions}`，兼容 `{categories}`
+- AI Prompt 默认展开展示，默认模板保留完整中文分类规则和示例；接口协议部分使用 `{category_map}`、`{transactions}`
 - 偏好接口返回 `default_prompt_template`，前端“重置为默认Prompt”按钮用它恢复文本框内容
+- “重置为默认Prompt”右侧的“本次最多处理”是 `/classify` 的一次性 `limit` 参数，`0` 表示不限制，不写入 `user_preferences`
 - 默认输入协议使用分类编号和紧凑交易行：`id|当前分类|交易对方|商品说明`；不发送备注、金额、时间、订单号等其他字段
-- 默认输出协议为 `{"t":[[id,分类编号]]}`，后端会映射回分类名称，并兼容旧版对象格式
+- 默认输出协议为 `{"t":[[id,分类编号]]}`，后端会映射回分类名称；不兼容旧版对象格式或字符串分类
 - 页面默认勾选“仅分类支出数据”；勾选时只处理 `expense`，未勾选时处理非“不计”数据；后端过滤 `neutral`、`不计`、`不计收支`
 - `/ai-classification/classify` 执行前会保存本次提交的分类列表、API key、Prompt 模板和支出筛选开关，并按用户模板调用 DeepSeek
 - 分批处理（每批 100 条，最多 5 并发线程，3 次重试，超时 600 秒）
+- 批次失败后 SSE 会返回最近失败详情，前端展示批次号、条数和脱敏后的错误摘要
 - 默认严格提示词确保 AI 只输出指定分类；用户自定义 Prompt 后以后端收到的模板为准
 - 预览差异后用户确认才写入数据库
 

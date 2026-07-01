@@ -74,12 +74,20 @@ const AiClassification = {
                      font-size:13px;background:var(--input-bg);color:var(--text);
                      font-family:monospace;line-height:1.5;resize:vertical"></textarea>
             <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
-              可使用 {category_map} 表示分类编号，{transactions} 表示本批交易数据；仍兼容 {categories}。
+              可使用 {category_map} 表示分类编号，{transactions} 表示本批交易数据。
             </div>
-            <button id="btn-reset-ai-prompt" type="button" class="btn btn-ghost"
-              style="margin-top:8px;padding:8px 10px;font-size:13px">
-              重置为默认Prompt
-            </button>
+            <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:8px">
+              <button id="btn-reset-ai-prompt" type="button" class="btn btn-ghost"
+                style="padding:8px 10px;font-size:13px">
+                重置为默认Prompt
+              </button>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)">
+                <span>本次最多处理</span>
+                <input type="number" id="ai-limit" min="0" step="1" value="0"
+                  style="width:120px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                         font-size:13px;background:var(--input-bg);color:var(--text)">
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -152,6 +160,7 @@ const AiClassification = {
     const apiKey = container.querySelector("#ai-api-key").value.trim();
     const promptTemplate = container.querySelector("#ai-prompt-template").value.trim();
     const onlyExpense = container.querySelector("#ai-only-expense").checked;
+    const limit = Math.max(0, parseInt(container.querySelector("#ai-limit").value, 10) || 0);
 
     if (!categories) {
       AiClassification._showToast("请填写分类");
@@ -181,11 +190,16 @@ const AiClassification = {
         <div id="ai-progress-detail" style="font-size:12px;color:var(--text-muted);margin-top:8px">
           准备中...
         </div>
+        <div id="ai-failure-details" style="display:none;margin-top:10px;padding:10px;
+             border:1px solid rgba(239,68,68,.28);border-radius:var(--radius-sm);
+             background:rgba(239,68,68,.06);color:var(--expense);font-size:12px;line-height:1.5">
+        </div>
       </div>`;
 
     const progressStatus = document.getElementById("ai-progress-status");
     const progressFill = document.getElementById("ai-progress-fill");
     const progressDetail = document.getElementById("ai-progress-detail");
+    const failureDetailsEl = document.getElementById("ai-failure-details");
 
     const updateProgress = (phase, message, pct) => {
       if (progressStatus) progressStatus.textContent = message;
@@ -209,6 +223,7 @@ const AiClassification = {
           categories: categories,
           prompt_template: promptTemplate,
           only_expense: onlyExpense,
+          limit: limit,
         }),
         signal: controller.signal,
       });
@@ -285,6 +300,17 @@ const AiClassification = {
 
               updateProgress(phase, msg, pct);
               if (progressDetail) progressDetail.textContent = msg.replace(/^[^\s]+\s/, "");
+              if (failureDetailsEl && Array.isArray(data.failed_details) && data.failed_details.length > 0) {
+                const details = data.failed_details.slice(-5).map((item) => {
+                  const batch = item.batch || "?";
+                  const totalB = item.total_batches || data.total_batches || "?";
+                  const count = item.count || 0;
+                  const reason = AiClassification._escapeHtml(item.reason || "未知错误");
+                  return `<div>第 ${batch}/${totalB} 批（${count} 条）：${reason}</div>`;
+                }).join("");
+                failureDetailsEl.style.display = "block";
+                failureDetailsEl.innerHTML = `<strong>失败详情（最近 ${Math.min(data.failed_details.length, 5)} 条）</strong>${details}`;
+              }
 
             } else if (eventType === "complete") {
               completeData = data;
@@ -507,6 +533,15 @@ const AiClassification = {
       toast.classList.remove("show");
       setTimeout(() => toast.remove(), 200);
     }, 2600);
+  },
+
+  _escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   },
 
   _fmtDate(iso) {

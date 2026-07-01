@@ -11,6 +11,7 @@ from autocoin.routers.ai_classification import (
     _filter_classifiable_transactions,
     _normalize_ai_result_item,
     _render_prompt_template,
+    _summarize_error,
 )
 from autocoin.app import create_app
 from tests.test_parsers import _make_alipay_csv, _make_cmb_securities_xls
@@ -224,6 +225,7 @@ class TestAIClassificationPreferences:
             "api_key": "sk-classify",
             "prompt_template": "只返回 JSON。分类: {categories}\n交易:\n{transactions}",
             "only_expense": False,
+            "limit": 5,
         }
 
         resp = client.post(
@@ -238,8 +240,11 @@ class TestAIClassificationPreferences:
         assert prefs_resp.status_code == 200
         prefs_data = prefs_resp.json()
         for key, value in payload.items():
+            if key == "limit":
+                continue
             assert prefs_data[key] == value
         assert prefs_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+        assert "limit" not in prefs_data
 
     def test_render_prompt_template_replaces_variables(self):
         prompt = _render_prompt_template(
@@ -294,8 +299,18 @@ class TestAIClassificationPreferences:
         category_map = {1: "餐饮", 2: "交通"}
 
         assert _normalize_ai_result_item([7, 2], category_map) == (7, "交通")
-        assert _normalize_ai_result_item({"id": 8, "category_id": "1"}, category_map) == (8, "餐饮")
-        assert _normalize_ai_result_item({"id": 9, "category": "购物"}, category_map) == (9, "购物")
+        assert _normalize_ai_result_item([8, "1"], category_map) == (8, "餐饮")
+        assert _normalize_ai_result_item({"id": 8, "category_id": "1"}, category_map) == (None, "")
+        assert _normalize_ai_result_item({"id": 9, "category": "餐饮"}, category_map) == (None, "")
+        assert _normalize_ai_result_item([10, "购物"], category_map) == (None, "")
+        assert _normalize_ai_result_item([11, "PULSE交易"], category_map) == (None, "")
+
+    def test_summarize_error_redacts_and_truncates(self):
+        summary = _summarize_error(RuntimeError("bad key sk-secret-value " + ("x" * 300)))
+
+        assert "sk-***" in summary
+        assert "secret-value" not in summary
+        assert len(summary) <= 240
 
 
 class TestTransactions:
