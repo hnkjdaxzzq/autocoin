@@ -24,6 +24,7 @@ class TransactionResponse(BaseModel):
     import_batch_id: Optional[str] = None
     is_deleted: int = 0
     finishrefundcheck: int = 0
+    is_ai_classified: int = 0
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

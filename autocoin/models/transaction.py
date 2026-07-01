@@ -30,6 +30,7 @@ class Transaction(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_deleted = Column(Integer, nullable=False, default=0)
     finishrefundcheck = Column(Integer, nullable=False, default=0, index=True)
+    is_ai_classified = Column(Integer, nullable=False, default=0, index=True)
 
     __table_args__ = (
         UniqueConstraint("user_id", "source", "source_order_id", name="uq_user_source_order"),

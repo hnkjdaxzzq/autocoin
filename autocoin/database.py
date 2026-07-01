@@ -47,6 +47,9 @@ def _ensure_lightweight_migrations():
         if "finishrefundcheck" not in tx_columns:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN finishrefundcheck INTEGER NOT NULL DEFAULT 0"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_finishrefundcheck ON transactions (finishrefundcheck)"))
+        if "is_ai_classified" not in tx_columns:
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN is_ai_classified INTEGER NOT NULL DEFAULT 0"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_is_ai_classified ON transactions (is_ai_classified)"))
 
 
 def get_db():

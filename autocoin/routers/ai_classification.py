@@ -59,6 +59,7 @@ class ClassifyRequest(BaseModel):
     categories: str  # comma-separated, e.g. "美食,交通,旅游"
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     only_expense: bool = True
+    only_unclassified: bool = True
     limit: int = 0
     debug: bool = False
     start_date: Optional[str] = None
@@ -122,7 +123,7 @@ def _normalize_preferences(value) -> AIClassificationPreferences:
         categories=value.get("categories") or DEFAULT_CATEGORIES,
         api_key=value.get("api_key") or "",
         prompt_template=value.get("prompt_template") or DEFAULT_PROMPT_TEMPLATE,
-        only_expense=value.get("only_expense", True) is not False,
+        only_expense=True,
         default_prompt_template=DEFAULT_PROMPT_TEMPLATE,
     )
 
@@ -132,7 +133,6 @@ def _preference_payload(body: AIClassificationPreferences) -> dict:
         "categories": body.categories,
         "api_key": body.api_key,
         "prompt_template": body.prompt_template or DEFAULT_PROMPT_TEMPLATE,
-        "only_expense": body.only_expense,
     }
 
 
@@ -173,18 +173,26 @@ def _build_transaction_prompt_lines(transactions: list[dict]) -> str:
 def _filter_classifiable_transactions(
     transactions: list[dict],
     only_expense: bool = True,
+    only_unclassified: bool = True,
 ) -> list[dict]:
     """Exclude transactions that should not participate in AI classification."""
     neutral_values = {"neutral", "不计", "不计收支"}
     if only_expense:
-        return [
+        filtered = [
             tx for tx in transactions
             if (tx.get("direction") or "").strip() == "expense"
         ]
-    return [
-        tx for tx in transactions
-        if (tx.get("direction") or "").strip() not in neutral_values
-    ]
+    else:
+        filtered = [
+            tx for tx in transactions
+            if (tx.get("direction") or "").strip() not in neutral_values
+        ]
+    if only_unclassified:
+        filtered = [
+            tx for tx in filtered
+            if int(tx.get("is_ai_classified") or 0) != 1
+        ]
+    return filtered
 
 
 def _render_prompt_template(
@@ -538,6 +546,7 @@ def _classify_stream(
     categories: list[str],
     prompt_template: str,
     only_expense: bool,
+    only_unclassified: bool,
     limit: int,
     debug: bool,
     start_date: Optional[str],
@@ -557,7 +566,11 @@ def _classify_stream(
         start_date=start_date,
         end_date=end_date,
     )
-    all_tx = _filter_classifiable_transactions(all_tx, only_expense=only_expense)
+    all_tx = _filter_classifiable_transactions(
+        all_tx,
+        only_expense=only_expense,
+        only_unclassified=only_unclassified,
+    )
     if limit > 0:
         all_tx = all_tx[:limit]
     total = len(all_tx)
@@ -693,7 +706,6 @@ def classify_transactions(
         "categories": body.categories,
         "api_key": body.api_key,
         "prompt_template": prompt_template,
-        "only_expense": body.only_expense,
     })
 
     return StreamingResponse(
@@ -702,6 +714,7 @@ def classify_transactions(
             categories,
             prompt_template,
             body.only_expense,
+            body.only_unclassified,
             max(body.limit, 0),
             body.debug,
             body.start_date,
@@ -727,9 +740,12 @@ def confirm_classification(
     for item in body.results:
         tid = item.get("id")
         category = item.get("category", "")
-        if tid and category:
+        if tid:
             try:
-                result = repo.update_transaction(tid, {"category": category})
+                update_data = {"is_ai_classified": 1}
+                if category:
+                    update_data["category"] = category
+                result = repo.update_transaction(tid, update_data)
                 if result:
                     updated += 1
             except Exception as e:

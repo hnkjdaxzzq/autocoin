@@ -36,6 +36,7 @@ def _tx_to_dict(tx: Transaction) -> dict:
         "import_batch_id": tx.import_batch_id,
         "is_deleted": tx.is_deleted,
         "finishrefundcheck": tx.finishrefundcheck,
+        "is_ai_classified": tx.is_ai_classified,
         "created_at": tx.created_at.isoformat() if tx.created_at else None,
         "updated_at": tx.updated_at.isoformat() if tx.updated_at else None,
     }
@@ -284,7 +285,7 @@ class SQLiteRepository(DataRepository):
         ).first()
         if not tx:
             return None
-        allowed = {"category", "remark", "direction"}
+        allowed = {"category", "remark", "direction", "is_ai_classified"}
         for k, v in data.items():
             if k in allowed and v is not None:
                 setattr(tx, k, v)
@@ -319,6 +320,7 @@ class SQLiteRepository(DataRepository):
             updated_at=now,
             is_deleted=0,
             finishrefundcheck=0,
+            is_ai_classified=0,
         )
         self._db.add(tx)
         self._db.commit()

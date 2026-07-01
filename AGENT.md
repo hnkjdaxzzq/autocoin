@@ -176,6 +176,7 @@ autocoin-t/
 | updated_at | DateTime | NOT NULL | 更新时间 |
 | is_deleted | Integer | NOT NULL, default=0 | 软删除标志 |
 | finishrefundcheck | Integer | NOT NULL, default=0, indexed | 退款检测确认标记（0/NULL 未确认，1 已确认） |
+| is_ai_classified | Integer | NOT NULL, default=0, indexed | AI 分类确认标记（0/NULL 未确认，1 已确认） |
 
 > **唯一约束：** `(user_id, source, source_order_id)` — 防止同一来源的相同订单重复导入。
 
@@ -396,7 +397,7 @@ autocoin-t/
 - 使用 **DeepSeek API**，通过 SSE 流式推送进度
 - 用户输入分类列表（逗号分隔），AI 将所有交易强制归入这些分类
 - 分类列表未配置时默认值为 `餐饮美食，交通出行，汽车，母婴儿童，娱乐，购物，生活缴费，社保费用，医疗，旅游，其他`
-- 分类列表、DeepSeek API key、AI Prompt 模板、是否仅处理支出数据保存于 `user_preferences`，偏好 key 为 `ai_classification.preferences`
+- 分类列表、DeepSeek API key、AI Prompt 模板保存于 `user_preferences`，偏好 key 为 `ai_classification.preferences`
 - AI Prompt 默认展开展示，默认模板为中文精简分类规则；接口协议部分使用 `{category_map}`、`{transactions}`
 - 偏好接口返回 `default_prompt_template`，前端“重置为默认Prompt”按钮用它恢复文本框内容
 - “重置为默认Prompt”右侧的“本次最多处理”是 `/classify` 的一次性 `limit` 参数，`0` 表示不限制，不写入 `user_preferences`
@@ -404,12 +405,12 @@ autocoin-t/
 - 分类输入框说明下方有默认收起的“选择时间范围”区域；开始/结束日期是 `/classify` 的一次性 `start_date` / `end_date` 参数，默认不选表示全部日期，不写入 `user_preferences`
 - 默认输入协议使用分类编号和紧凑交易行：`id|当前分类|交易对方|商品说明`；不发送备注、金额、时间、订单号等其他字段
 - 默认输出协议为 `{"t":[[id,分类编号]]}`，后端会映射回分类名称；不兼容旧版对象格式或字符串分类
-- 页面默认勾选“仅分类支出数据”；勾选时只处理 `expense`，未勾选时处理非“不计”数据；后端过滤 `neutral`、`不计`、`不计收支`
-- `/ai-classification/classify` 执行前会保存本次提交的分类列表、API key、Prompt 模板和支出筛选开关，并按用户模板调用 DeepSeek
+- 页面默认勾选“仅分类支出数据”和“只处理未经AI分类的数据”，两者均不持久化；默认只处理 `expense` 且 `is_ai_classified != 1`，取消支出筛选时处理非“不计”数据
+- `/ai-classification/classify` 执行前会保存本次提交的分类列表、API key、Prompt 模板，并按用户模板调用 DeepSeek
 - 分批处理（每批 50 条，DeepSeek `max_tokens=8192`，最多 5 并发线程，每次请求 3 次重试，超时 600 秒）；若返回 `finish_reason=length` 或不完整 JSON，会自动二分拆批继续处理，最多拆分 3 层
 - 批次失败后 SSE 会返回最近失败详情，前端展示批次号、条数和尽量完整的错误摘要；DeepSeek 返回非 JSON 时会展示原始返回片段
 - 默认严格提示词确保 AI 只输出指定分类；用户自定义 Prompt 后以后端收到的模板为准
-- 预览差异后用户确认才写入数据库
+- 预览弹窗确认后才写入数据库；确认时提交全部预览结果并将交易 `is_ai_classified=1`，自定义分类留空用 AI 新分类，填写后用自定义分类，取消弹窗不写入
 
 ### 6.5 数据备份还原
 

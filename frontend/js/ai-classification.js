@@ -6,6 +6,7 @@ const AiClassification = {
     allResults: [],
     filteredResults: [],
     completeData: null,
+    customCategories: {},
     latestFailedDetails: [],
     latestTotalBatches: 0,
     promptExpanded: true,
@@ -61,11 +62,18 @@ const AiClassification = {
           </div>
         </div>
 
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:14px;color:var(--text);cursor:pointer">
-          <input type="checkbox" id="ai-only-expense" checked
-            style="width:16px;height:16px;accent-color:var(--primary)">
-          <span>仅分类支出数据</span>
-        </label>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);cursor:pointer">
+            <input type="checkbox" id="ai-only-expense" checked
+              style="width:16px;height:16px;accent-color:var(--primary)">
+            <span>仅分类支出数据</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);cursor:pointer">
+            <input type="checkbox" id="ai-only-unclassified" checked
+              style="width:16px;height:16px;accent-color:var(--primary)">
+            <span>只处理未经AI分类的数据</span>
+          </label>
+        </div>
 
         <button id="btn-ai-classify" class="btn btn-primary" style="width:100%;padding:10px;font-size:15px;font-weight:600">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -190,12 +198,10 @@ const AiClassification = {
       const categoriesEl = container.querySelector("#ai-categories");
       const apiKeyEl = container.querySelector("#ai-api-key");
       const promptEl = container.querySelector("#ai-prompt-template");
-      const onlyExpenseEl = container.querySelector("#ai-only-expense");
       AiClassification._state.defaultPromptTemplate = prefs.default_prompt_template || "";
       if (categoriesEl) categoriesEl.value = prefs.categories || AiClassification._state.defaultCategories;
       if (apiKeyEl) apiKeyEl.value = prefs.api_key || "";
       if (promptEl) promptEl.value = prefs.prompt_template || "";
-      if (onlyExpenseEl) onlyExpenseEl.checked = prefs.only_expense !== false;
     } catch (err) {
       AiClassification._showToast("读取 AI 配置失败: " + err.message);
     }
@@ -226,6 +232,7 @@ const AiClassification = {
     const apiKey = container.querySelector("#ai-api-key").value.trim();
     const promptTemplate = container.querySelector("#ai-prompt-template").value.trim();
     const onlyExpense = container.querySelector("#ai-only-expense").checked;
+    const onlyUnclassified = container.querySelector("#ai-only-unclassified").checked;
     const limit = Math.max(0, parseInt(container.querySelector("#ai-limit").value, 10) || 0);
     const debug = container.querySelector("#ai-debug-mode").checked;
     const startDate = container.querySelector("#ai-start-date").value;
@@ -295,6 +302,7 @@ const AiClassification = {
           categories: categories,
           prompt_template: promptTemplate,
           only_expense: onlyExpense,
+          only_unclassified: onlyUnclassified,
           limit: limit,
           debug: debug,
           start_date: startDate || null,
@@ -408,6 +416,7 @@ const AiClassification = {
       // Store results
       AiClassification._state.allResults = completeData.results;
       AiClassification._state.completeData = completeData;
+      AiClassification._state.customCategories = {};
 
       // Update status to summary
       const finalFailureDetails = AiClassification._failureDetailsHtml(
@@ -488,22 +497,33 @@ const AiClassification = {
                 <th>商品</th>
                 <th style="width:100px">旧分类</th>
                 <th style="width:100px">新分类</th>
+                <th style="width:150px">自定义</th>
               </tr>
             </thead>
             <tbody>
-              ${pageItems.map((item, i) => `
-                <tr>
-                  <td style="color:var(--text-muted)">${start + i + 1}</td>
-                  <td>${AiClassification._fmtDate(item.transaction_time)}</td>
-                  <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                      title="${item.counterparty || ""}">${item.counterparty || "—"}</td>
-                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                      title="${item.product || ""}">${item.product || "—"}</td>
-                  <td><span class="badge badge-old">${item.old_category || "—"}</span></td>
-                  <td><span class="badge badge-new">${item.new_category || "—"}</span></td>
-                </tr>
-              `).join("")}
-              ${pageItems.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">没有数据</td></tr>' : ""}
+              ${pageItems.map((item, i) => {
+                const customValue = AiClassification._state.customCategories[item.id] || "";
+                return `
+                  <tr>
+                    <td style="color:var(--text-muted)">${start + i + 1}</td>
+                    <td>${AiClassification._fmtDate(item.transaction_time)}</td>
+                    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                        title="${AiClassification._escapeHtml(item.counterparty || "")}">${AiClassification._escapeHtml(item.counterparty || "—")}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                        title="${AiClassification._escapeHtml(item.product || "")}">${AiClassification._escapeHtml(item.product || "—")}</td>
+                    <td><span class="badge badge-old">${AiClassification._escapeHtml(item.old_category || "—")}</span></td>
+                    <td><span class="badge badge-new">${AiClassification._escapeHtml(item.new_category || "—")}</span></td>
+                    <td>
+                      <input type="text" class="ai-custom-category-input" data-id="${item.id}"
+                        value="${AiClassification._escapeHtml(customValue)}"
+                        placeholder="${AiClassification._escapeHtml(item.new_category || "")}"
+                        style="width:100%;min-width:120px;padding:6px 8px;border:1px solid var(--border);
+                               border-radius:var(--radius-sm);background:var(--input-bg);color:var(--text);font-size:12px">
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+              ${pageItems.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">没有数据</td></tr>' : ""}
             </tbody>
           </table>
         </div>
@@ -542,7 +562,7 @@ const AiClassification = {
           <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">
             共 <strong style="color:var(--text)">${allResults.length}</strong> 条数据，
             其中 <strong style="color:var(--expense)">${allResults.filter(r => r.old_category !== r.new_category).length}</strong> 条分类发生变更。
-            每页展示 ${pageSize} 条。
+            每页展示 ${pageSize} 条。自定义分类留空时使用 AI 返回的新分类。
           </div>
           <div class="modal-body-content">
             ${renderTable(1)}
@@ -563,6 +583,19 @@ const AiClassification = {
       if (!btn) return;
       e.preventDefault();
       AiClassification._downloadDebugLog(btn.dataset.aiDebugDownload || "");
+    });
+
+    overlay.addEventListener("input", (e) => {
+      const input = e.target.closest(".ai-custom-category-input");
+      if (!input) return;
+      const id = input.dataset.id;
+      const value = input.value.trim();
+      if (!id) return;
+      if (value) {
+        AiClassification._state.customCategories[id] = value;
+      } else {
+        delete AiClassification._state.customCategories[id];
+      }
     });
 
     overlay.querySelector("#modal-confirm-ai").addEventListener("click", async () => {
@@ -591,14 +624,17 @@ const AiClassification = {
     btn.textContent = "提交中...";
 
     try {
-      // Only write records where category actually changed
-      const changedResults = AiClassification._state.allResults.filter(
-        r => r.old_category !== r.new_category
-      );
-      const payload = changedResults.map(r => ({
-        id: r.id,
-        category: r.new_category,
-      }));
+      const customCategories = AiClassification._state.customCategories || {};
+      const payload = AiClassification._state.allResults
+        .map((r) => {
+          const custom = (customCategories[r.id] || "").trim();
+          const finalCategory = custom || r.new_category || r.old_category || "";
+          return {
+            id: r.id,
+            category: finalCategory,
+          };
+        })
+        .filter((r) => r.id);
 
       const res = await API.aiClassification.confirm({ results: payload });
 

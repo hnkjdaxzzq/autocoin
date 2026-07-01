@@ -210,7 +210,10 @@ class TestAIClassificationPreferences:
         assert resp.status_code == 200
         data = resp.json()
         for key, value in payload.items():
+            if key == "only_expense":
+                continue
             assert data[key] == value
+        assert data["only_expense"] is True
         assert data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
 
         owner_resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
@@ -218,7 +221,10 @@ class TestAIClassificationPreferences:
 
         owner_data = owner_resp.json()
         for key, value in payload.items():
+            if key == "only_expense":
+                continue
             assert owner_data[key] == value
+        assert owner_data["only_expense"] is True
         assert owner_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
         assert other_resp.json()["categories"] == DEFAULT_CATEGORIES
         assert other_resp.json()["api_key"] == ""
@@ -233,6 +239,7 @@ class TestAIClassificationPreferences:
             "api_key": "sk-classify",
             "prompt_template": "只返回 JSON。分类: {categories}\n交易:\n{transactions}",
             "only_expense": False,
+            "only_unclassified": False,
             "limit": 5,
             "debug": True,
             "start_date": "2025-01-01",
@@ -251,10 +258,12 @@ class TestAIClassificationPreferences:
         assert prefs_resp.status_code == 200
         prefs_data = prefs_resp.json()
         for key, value in payload.items():
-            if key in ("limit", "debug", "start_date", "end_date"):
+            if key in ("only_expense", "only_unclassified", "limit", "debug", "start_date", "end_date"):
                 continue
             assert prefs_data[key] == value
+        assert prefs_data["only_expense"] is True
         assert prefs_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+        assert "only_unclassified" not in prefs_data
         assert "limit" not in prefs_data
         assert "debug" not in prefs_data
         assert "start_date" not in prefs_data
@@ -285,11 +294,12 @@ class TestAIClassificationPreferences:
 
     def test_filter_classifiable_transactions_defaults_to_expense_only(self):
         transactions = [
-            {"id": 1, "direction": "expense"},
-            {"id": 2, "direction": "income"},
-            {"id": 3, "direction": "neutral"},
-            {"id": 4, "direction": "不计"},
-            {"id": 5, "direction": "不计收支"},
+            {"id": 1, "direction": "expense", "is_ai_classified": 0},
+            {"id": 2, "direction": "income", "is_ai_classified": 0},
+            {"id": 3, "direction": "neutral", "is_ai_classified": 0},
+            {"id": 4, "direction": "不计", "is_ai_classified": 0},
+            {"id": 5, "direction": "不计收支", "is_ai_classified": 0},
+            {"id": 6, "direction": "expense", "is_ai_classified": 1},
         ]
 
         filtered = _filter_classifiable_transactions(transactions)
@@ -298,14 +308,25 @@ class TestAIClassificationPreferences:
 
     def test_filter_classifiable_transactions_can_include_non_neutral(self):
         transactions = [
-            {"id": 1, "direction": "expense"},
-            {"id": 2, "direction": "income"},
-            {"id": 3, "direction": "neutral"},
-            {"id": 4, "direction": "不计"},
-            {"id": 5, "direction": "不计收支"},
+            {"id": 1, "direction": "expense", "is_ai_classified": 0},
+            {"id": 2, "direction": "income", "is_ai_classified": 0},
+            {"id": 3, "direction": "neutral", "is_ai_classified": 0},
+            {"id": 4, "direction": "不计", "is_ai_classified": 0},
+            {"id": 5, "direction": "不计收支", "is_ai_classified": 0},
+            {"id": 6, "direction": "income", "is_ai_classified": 1},
         ]
 
         filtered = _filter_classifiable_transactions(transactions, only_expense=False)
+
+        assert [tx["id"] for tx in filtered] == [1, 2]
+
+    def test_filter_classifiable_transactions_can_include_ai_classified(self):
+        transactions = [
+            {"id": 1, "direction": "expense", "is_ai_classified": 0},
+            {"id": 2, "direction": "expense", "is_ai_classified": 1},
+        ]
+
+        filtered = _filter_classifiable_transactions(transactions, only_unclassified=False)
 
         assert [tx["id"] for tx in filtered] == [1, 2]
 
@@ -421,6 +442,31 @@ class TestAIClassificationPreferences:
 
         assert calls == [[1, 2, 3, 4], [1, 2], [3, 4]]
         assert [item["id"] for item in results] == [1, 2, 3, 4]
+
+    def test_confirm_marks_all_submitted_transactions_as_ai_classified(self, client):
+        headers = self._register_headers(client, "aiconfirmmarks")
+        create_resp = client.post("/api/v1/transactions", headers=headers, json={
+            "transaction_time": "2026-06-01 12:00:00",
+            "direction": "expense",
+            "amount": 12.5,
+            "category": "餐饮",
+            "counterparty": "商户",
+        })
+        assert create_resp.status_code == 201
+        tid = create_resp.json()["id"]
+
+        resp = client.post(
+            "/api/v1/ai-classification/confirm",
+            headers=headers,
+            json={"results": [{"id": tid, "category": "餐饮"}]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 1
+        tx_resp = client.get(f"/api/v1/transactions/{tid}", headers=headers)
+        assert tx_resp.status_code == 200
+        assert tx_resp.json()["category"] == "餐饮"
+        assert tx_resp.json()["is_ai_classified"] == 1
 
 
 class TestTransactions:
