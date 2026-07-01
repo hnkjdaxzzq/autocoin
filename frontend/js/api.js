@@ -198,6 +198,16 @@ const API = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
       }),
+    searchWealth: () =>
+      apiFetch("/special-data-processing/wealth/search", {
+        method: "POST",
+      }),
+    confirmWealth: (ids) =>
+      apiFetch("/special-data-processing/wealth/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      }),
   },
   imports: {
     upload: async (formData) => {

@@ -26,6 +26,10 @@ class RefundConfirmRequest(BaseModel):
     items: list[RefundConfirmItem]
 
 
+class WealthConfirmRequest(BaseModel):
+    ids: list[int]
+
+
 PUNCT_TRANSLATION = str.maketrans({
     "，": ",",
     "。": ".",
@@ -65,6 +69,20 @@ def _tx_to_response(tx: Transaction) -> dict:
         "remark": tx.remark,
         "finishrefundcheck": tx.finishrefundcheck,
     }
+
+
+def _wealth_query(db: Session, user_id: int):
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.is_deleted == 0,
+            Transaction.direction != "neutral",
+            Transaction.source == "alipay",
+            Transaction.counterparty == "余额宝",
+            Transaction.product.ilike("%余额宝%"),
+        )
+    )
 
 
 def _normalize_product(value: Optional[str]) -> str:
@@ -200,6 +218,46 @@ def search_refund_candidates(
     user: User = Depends(get_current_user),
 ):
     return _build_refund_search(db, user.id)
+
+
+@router.post("/wealth/search")
+def search_wealth_candidates(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    items = (
+        _wealth_query(db, user.id)
+        .order_by(Transaction.transaction_time.desc(), Transaction.id.asc())
+        .all()
+    )
+    return {
+        "total": len(items),
+        "items": [_tx_to_response(tx) for tx in items],
+    }
+
+
+@router.post("/wealth/confirm")
+def confirm_wealth_candidates(
+    body: WealthConfirmRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ids = list(dict.fromkeys(body.ids))
+    if not ids:
+        return {"updated": 0, "total": 0}
+
+    now = datetime.utcnow()
+    try:
+        rows = _wealth_query(db, user.id).filter(Transaction.id.in_(ids)).all()
+        for tx in rows:
+            tx.direction = "neutral"
+            tx.updated_at = now
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="理财数据处理失败") from exc
+
+    return {"updated": len(rows), "total": len(ids)}
 
 
 @router.post("/refunds/confirm")

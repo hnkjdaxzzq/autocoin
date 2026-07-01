@@ -348,6 +348,8 @@ autocoin-t/
 |------|------|------|
 | POST | `/special-data-processing/refunds/search` | 查询当前用户未确认的疑似退款数据，并返回匹配支出候选 |
 | POST | `/special-data-processing/refunds/confirm` | 确认退款处理结果，标记疑似退款和被选中的支出候选 |
+| POST | `/special-data-processing/wealth/search` | 查询当前用户支付宝余额宝疑似理财数据 |
+| POST | `/special-data-processing/wealth/confirm` | 将用户勾选的疑似理财数据标为不计 |
 
 ---
 
@@ -412,7 +414,7 @@ autocoin-t/
 | `#/import` | 导入 | 文件导入 + 图片导入 + 券商导入快捷键 |
 | `#/rules` | 规则 | 分类规则 + 别名规则双标签，带差异对比对话框 |
 | `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细 |
-| `#/special-data-processing` | 特殊数据处理 | 退款数据处理，支持一条疑似退款对应多条支出候选 |
+| `#/special-data-processing` | 特殊数据处理 | 退款数据处理、理财数据检查 |
 | `#/data-management` | 数据管理 | 全量备份导出/导入还原/交易管理 |
 | `#/ai-analysis` | AI 分析 | AI 自动分类（SSE 进度 + 预览确认） |
 

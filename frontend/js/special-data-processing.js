@@ -5,6 +5,9 @@ const SpecialDataProcessing = {
     page: 1,
     pageSize: 50,
     selections: new Map(),
+    wealthResult: null,
+    wealthPage: 1,
+    wealthSelections: new Map(),
   },
 
   render(container) {
@@ -16,7 +19,7 @@ const SpecialDataProcessing = {
         </div>
       </div>
 
-      <div class="summary-card" style="max-width:560px">
+      <div class="summary-card" style="max-width:560px;margin-bottom:16px">
         <div class="label">退款数据处理</div>
         <div style="margin:8px 0 16px;color:var(--text-muted);font-size:14px;line-height:1.6">
           查询微信、支付宝和汇丰 PULSE 中尚未确认过的疑似退款数据，并选择对应支出记录后批量处理为“不计”。
@@ -25,10 +28,23 @@ const SpecialDataProcessing = {
           查询所有疑似退款数据
         </button>
       </div>
+
+      <div class="summary-card" style="max-width:560px">
+        <div class="label">理财数据检查</div>
+        <div style="margin:8px 0 16px;color:var(--text-muted);font-size:14px;line-height:1.6">
+          检查支付宝余额宝相关交易，并按需批量标记为“不计”。
+        </div>
+        <button class="btn btn-primary" id="btn-search-wealth" type="button">
+          检查理财数据
+        </button>
+      </div>
     `;
 
     container.querySelector("#btn-search-refunds").addEventListener("click", () => {
       SpecialDataProcessing._searchRefunds(container);
+    });
+    container.querySelector("#btn-search-wealth").addEventListener("click", () => {
+      SpecialDataProcessing._searchWealth(container);
     });
   },
 
@@ -62,6 +78,31 @@ const SpecialDataProcessing = {
     });
   },
 
+  async _searchWealth(container) {
+    const btn = container.querySelector("#btn-search-wealth");
+    btn.disabled = true;
+    btn.textContent = "检查中...";
+    try {
+      const result = await API.specialDataProcessing.searchWealth();
+      SpecialDataProcessing._state.wealthResult = result;
+      SpecialDataProcessing._state.wealthPage = 1;
+      SpecialDataProcessing._initWealthSelections(result);
+      SpecialDataProcessing._showWealthModal();
+    } catch (err) {
+      showToast("检查失败: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "检查理财数据";
+    }
+  },
+
+  _initWealthSelections(result) {
+    SpecialDataProcessing._state.wealthSelections = new Map();
+    (result.items || []).forEach(tx => {
+      SpecialDataProcessing._state.wealthSelections.set(tx.id, true);
+    });
+  },
+
   _showRefundModal() {
     SpecialDataProcessing._removeModal();
     const overlay = document.createElement("div");
@@ -69,6 +110,15 @@ const SpecialDataProcessing = {
     overlay.id = "refund-processing-overlay";
     document.body.appendChild(overlay);
     SpecialDataProcessing._renderRefundModal(overlay);
+  },
+
+  _showWealthModal() {
+    SpecialDataProcessing._removeModal();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "wealth-processing-overlay";
+    document.body.appendChild(overlay);
+    SpecialDataProcessing._renderWealthModal(overlay);
   },
 
   _renderRefundModal(overlay) {
@@ -141,6 +191,65 @@ const SpecialDataProcessing = {
     });
   },
 
+  _renderWealthModal(overlay) {
+    const result = SpecialDataProcessing._state.wealthResult || { items: [] };
+    const items = result.items || [];
+    const totalPages = Math.max(1, Math.ceil(items.length / SpecialDataProcessing._state.pageSize));
+    const page = Math.min(SpecialDataProcessing._state.wealthPage, totalPages);
+    SpecialDataProcessing._state.wealthPage = page;
+    const start = (page - 1) * SpecialDataProcessing._state.pageSize;
+    const pageItems = items.slice(start, start + SpecialDataProcessing._state.pageSize);
+    const hasItems = items.length > 0;
+
+    overlay.innerHTML = `
+      <div class="modal-dialog modal-dialog-lg refund-modal-dialog">
+        <div class="modal-title">理财数据检查</div>
+        <div class="modal-body">
+          <div style="color:var(--text-muted);font-size:14px;margin-bottom:12px">
+            检测到 ${result.total || 0} 条疑似理财数据。
+          </div>
+          ${hasItems ? SpecialDataProcessing._renderWealthTable(pageItems) : `<div class="empty">没有检测到匹配的理财数据</div>`}
+          ${hasItems ? SpecialDataProcessing._renderWealthPagination(page, totalPages, items.length) : ""}
+        </div>
+        <div class="modal-buttons">
+          ${hasItems ? `
+            <button class="btn btn-primary" id="wealth-confirm">确认处理数据</button>
+            <button class="btn btn-ghost" id="wealth-cancel">取消</button>
+          ` : `
+            <button class="btn btn-primary" id="wealth-close">确认</button>
+          `}
+        </div>
+      </div>
+    `;
+
+    const cancelBtn = overlay.querySelector("#wealth-cancel");
+    const closeBtn = overlay.querySelector("#wealth-close");
+    if (cancelBtn) cancelBtn.addEventListener("click", () => {
+      SpecialDataProcessing._removeModal();
+    });
+    if (closeBtn) closeBtn.addEventListener("click", () => {
+      SpecialDataProcessing._removeModal();
+    });
+    const confirmBtn = overlay.querySelector("#wealth-confirm");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", () => SpecialDataProcessing._confirmWealth(confirmBtn));
+    }
+    overlay.querySelectorAll(".wealth-neutral-check").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const id = parseInt(cb.dataset.txId);
+        SpecialDataProcessing._state.wealthSelections.set(id, cb.checked);
+      });
+    });
+    overlay.querySelectorAll(".wealth-page-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const nextPage = parseInt(btn.dataset.page);
+        if (!nextPage || nextPage === SpecialDataProcessing._state.wealthPage) return;
+        SpecialDataProcessing._state.wealthPage = nextPage;
+        SpecialDataProcessing._renderWealthModal(overlay);
+      });
+    });
+  },
+
   _renderRefundTable(items) {
     return `
       <div class="modal-table-wrap refund-table-wrap">
@@ -184,6 +293,38 @@ const SpecialDataProcessing = {
     `;
   },
 
+  _renderWealthTable(items) {
+    return `
+      <div class="modal-table-wrap refund-table-wrap">
+        <table class="modal-table refund-result-table">
+          <thead>
+            <tr>
+              <th>标为“不计”</th>
+              <th>交易数据</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(tx => SpecialDataProcessing._renderWealthRow(tx)).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  },
+
+  _renderWealthRow(tx) {
+    const checked = SpecialDataProcessing._state.wealthSelections.get(tx.id) !== false;
+    return `
+      <tr>
+        <td>
+          <input type="checkbox" class="wealth-neutral-check" data-tx-id="${tx.id}" ${checked ? "checked" : ""}>
+        </td>
+        <td class="refund-tx-cell">
+          ${SpecialDataProcessing._renderTxSummary(tx)}
+        </td>
+      </tr>
+    `;
+  },
+
   _renderTxSummary(tx) {
     return `
       <div class="refund-tx-summary">
@@ -204,6 +345,20 @@ const SpecialDataProcessing = {
         <button class="page-btn" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹ 上一页</button>
         ${buttons.join("")}
         <button class="page-btn" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>下一页 ›</button>
+      </div>
+    `;
+  },
+
+  _renderWealthPagination(page, totalPages, total) {
+    const buttons = DataManagement._paginationItems(page, totalPages).map(item => (
+      `<button class="page-btn wealth-page-btn ${item.page === page ? "active" : ""}" data-page="${item.page}">${item.label}</button>`
+    ));
+    return `
+      <div class="pagination">
+        <span class="info">共 ${total} 条疑似理财数据</span>
+        <button class="page-btn wealth-page-btn" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹ 上一页</button>
+        ${buttons.join("")}
+        <button class="page-btn wealth-page-btn" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>下一页 ›</button>
       </div>
     `;
   },
@@ -232,9 +387,30 @@ const SpecialDataProcessing = {
     }
   },
 
+  async _confirmWealth(confirmBtn) {
+    const result = SpecialDataProcessing._state.wealthResult || { items: [] };
+    const ids = (result.items || [])
+      .map(tx => tx.id)
+      .filter(id => SpecialDataProcessing._state.wealthSelections.get(id) !== false);
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "处理中...";
+    try {
+      const res = await API.specialDataProcessing.confirmWealth(ids);
+      SpecialDataProcessing._removeModal();
+      showToast(`处理完成：已将 ${res.updated || 0} 条理财数据标为“不计”`);
+    } catch (err) {
+      showToast("处理失败: " + err.message);
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "确认处理数据";
+    }
+  },
+
   _removeModal() {
-    const existing = document.getElementById("refund-processing-overlay");
-    if (existing) existing.remove();
+    ["refund-processing-overlay", "wealth-processing-overlay"].forEach(id => {
+      const existing = document.getElementById(id);
+      if (existing) existing.remove();
+    });
   },
 
   _escape(value) {

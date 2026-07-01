@@ -671,6 +671,84 @@ class TestSpecialDataProcessingRefunds:
         assert other_refund["id"] not in refund_ids
 
 
+class TestSpecialDataProcessingWealth:
+    def _create_tx(self, client, headers, **overrides):
+        payload = {
+            "transaction_time": "2025-04-01 10:00:00",
+            "direction": "income",
+            "amount": 10,
+            "source": "alipay",
+            "counterparty": "余额宝",
+            "product": "余额宝收益",
+            "payment_method": "支付宝",
+        }
+        payload.update(overrides)
+        resp = client.post("/api/v1/transactions", headers=headers, json=payload)
+        assert resp.status_code == 201
+        return resp.json()
+
+    def test_wealth_search_filters_matching_alipay_yuebao_transactions(self, client, auth_headers):
+        matched = self._create_tx(client, auth_headers, product="余额宝-收益发放")
+        neutral = self._create_tx(client, auth_headers, direction="neutral", product="余额宝-已不计")
+        wrong_source = self._create_tx(client, auth_headers, source="wechat", product="余额宝-微信")
+        wrong_counterparty = self._create_tx(client, auth_headers, counterparty="其他", product="余额宝-其他")
+        wrong_product = self._create_tx(client, auth_headers, product="基金收益")
+        deleted = self._create_tx(client, auth_headers, product="余额宝-已删除")
+        delete_resp = client.delete(f"/api/v1/transactions/{deleted['id']}", headers=auth_headers)
+        assert delete_resp.status_code == 200
+
+        register_resp = client.post("/api/v1/auth/register", json={
+            "username": "wealthscopeuser",
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert register_resp.status_code == 201
+        other_headers = {"Authorization": f"Bearer {register_resp.json()['access_token']}"}
+        other_user = self._create_tx(client, other_headers, product="余额宝-其他用户")
+
+        search_resp = client.post("/api/v1/special-data-processing/wealth/search", headers=auth_headers)
+        assert search_resp.status_code == 200
+        data = search_resp.json()
+        ids = [item["id"] for item in data["items"]]
+        assert matched["id"] in ids
+        assert neutral["id"] not in ids
+        assert wrong_source["id"] not in ids
+        assert wrong_counterparty["id"] not in ids
+        assert wrong_product["id"] not in ids
+        assert deleted["id"] not in ids
+        assert other_user["id"] not in ids
+        assert data["total"] == len(ids)
+
+    def test_wealth_confirm_updates_only_selected_current_user_matches(self, client, auth_headers):
+        selected = self._create_tx(client, auth_headers, product="余额宝-转入")
+        unselected = self._create_tx(client, auth_headers, product="余额宝-收益")
+        wrong_product = self._create_tx(client, auth_headers, product="基金收益")
+
+        register_resp = client.post("/api/v1/auth/register", json={
+            "username": "wealthconfirmuser",
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert register_resp.status_code == 201
+        other_headers = {"Authorization": f"Bearer {register_resp.json()['access_token']}"}
+        other_user = self._create_tx(client, other_headers, product="余额宝-其他用户")
+
+        confirm_resp = client.post(
+            "/api/v1/special-data-processing/wealth/confirm",
+            headers=auth_headers,
+            json={"ids": [selected["id"], wrong_product["id"], other_user["id"]]},
+        )
+        assert confirm_resp.status_code == 200
+        assert confirm_resp.json()["updated"] == 1
+
+        selected_after = client.get(f"/api/v1/transactions/{selected['id']}", headers=auth_headers).json()
+        unselected_after = client.get(f"/api/v1/transactions/{unselected['id']}", headers=auth_headers).json()
+        wrong_after = client.get(f"/api/v1/transactions/{wrong_product['id']}", headers=auth_headers).json()
+        assert selected_after["direction"] == "neutral"
+        assert unselected_after["direction"] == "income"
+        assert wrong_after["direction"] == "income"
+
+
 class TestClassificationRules:
     def test_rule_crud(self, client, auth_headers):
         create_resp = client.post("/api/v1/rules", headers=auth_headers, json={
