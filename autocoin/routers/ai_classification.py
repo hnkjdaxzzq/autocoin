@@ -3,6 +3,7 @@ import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
@@ -56,6 +57,9 @@ class ClassifyRequest(BaseModel):
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     only_expense: bool = True
     limit: int = 0
+    debug: bool = False
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 class ClassifyResponse(BaseModel):
@@ -79,6 +83,13 @@ class ConfirmRequest(BaseModel):
 class ConfirmResponse(BaseModel):
     updated: int
     total: int
+
+
+class AIClassificationBatchError(Exception):
+    def __init__(self, message: str, prompt: str = "", raw_response: str = ""):
+        super().__init__(message)
+        self.prompt = prompt
+        self.raw_response = raw_response
 
 
 def get_repo(
@@ -205,12 +216,24 @@ def _normalize_ai_result_item(item, category_map: dict[int, str]) -> tuple:
 def _summarize_error(error: Exception) -> str:
     raw = str(error).strip() or error.__class__.__name__
     text = " ".join(raw.split())
-    sensitive_markers = ("sk-", "Bearer ")
-    for marker in sensitive_markers:
-        if marker in text:
-            text = text.split(marker)[0] + marker + "***"
-    if len(text) > 240:
-        text = text[:237] + "..."
+    if len(text) > 1000:
+        text = text[:997] + "..."
+    return text
+
+
+def _content_preview(content: str) -> str:
+    text = " ".join((content or "").split())
+    if not text:
+        return "<empty>"
+    if len(text) > 1000:
+        text = text[:997] + "..."
+    return text
+
+
+def _debug_preview(content: str) -> str:
+    text = content or ""
+    if len(text) > 4000:
+        text = text[:3997] + "..."
     return text
 
 
@@ -238,6 +261,7 @@ def _classify_batch(
     transactions: list[dict],
     categories: list[str],
     prompt_template: str,
+    debug: bool = False,
 ) -> list[dict]:
     """Send one batch of transactions to DeepSeek for classification."""
     prompt = _render_prompt_template(prompt_template, transactions, categories)
@@ -265,13 +289,24 @@ def _classify_batch(
                 max_tokens=4096,
             )
             content = response.choices[0].message.content.strip()
-            parsed = json.loads(content)
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise AIClassificationBatchError(
+                    f"AI returned non-JSON content: {_content_preview(content)}",
+                    prompt=prompt if debug else "",
+                    raw_response=content if debug else "",
+                ) from e
 
             transactions_result = _find_transactions_result(parsed)
 
             if transactions_result is None:
                 logger.warning("Could not find transaction list in response: %s", content[:300])
-                raise ValueError("Unexpected response format")
+                raise AIClassificationBatchError(
+                    f"Unexpected response format: {_content_preview(content)}",
+                    prompt=prompt if debug else "",
+                    raw_response=content if debug else "",
+                )
 
             # Validate and map results
             tx_map = {tx["id"]: tx for tx in transactions}
@@ -297,13 +332,17 @@ def _classify_batch(
 
             if invalid_count:
                 examples = "；".join(invalid_examples)
-                raise ValueError(
-                    f"AI returned {invalid_count} invalid classification item(s), examples: {examples}"
+                raise AIClassificationBatchError(
+                    f"AI returned {invalid_count} invalid classification item(s), examples: {examples}",
+                    prompt=prompt if debug else "",
+                    raw_response=content if debug else "",
                 )
             if tx_map:
                 missing_ids = list(tx_map.keys())[:5]
-                raise ValueError(
-                    f"AI missed {len(tx_map)} transaction(s), sample ids: {missing_ids}"
+                raise AIClassificationBatchError(
+                    f"AI missed {len(tx_map)} transaction(s), sample ids: {missing_ids}",
+                    prompt=prompt if debug else "",
+                    raw_response=content if debug else "",
                 )
 
             # Fill in any records DeepSeek missed with original category.
@@ -345,6 +384,9 @@ def _classify_stream(
     prompt_template: str,
     only_expense: bool,
     limit: int,
+    debug: bool,
+    start_date: Optional[str],
+    end_date: Optional[str],
     repo: SQLiteRepository,
 ):
     """Generator that yields SSE progress events and a final complete event."""
@@ -354,7 +396,12 @@ def _classify_stream(
         "message": "正在读取数据库中的交易数据...",
     })
 
-    all_tx, _ = repo.list_transactions(page=1, page_size=1000000)
+    all_tx, _ = repo.list_transactions(
+        page=1,
+        page_size=1000000,
+        start_date=start_date,
+        end_date=end_date,
+    )
     all_tx = _filter_classifiable_transactions(all_tx, only_expense=only_expense)
     if limit > 0:
         all_tx = all_tx[:limit]
@@ -396,6 +443,7 @@ def _classify_stream(
                 batch,
                 categories,
                 prompt_template,
+                debug,
             ): batch
             for batch in batches
         }
@@ -414,6 +462,8 @@ def _classify_stream(
                         "total_batches": total_batches,
                         "count": len(failed_batch),
                         "reason": _summarize_error(e),
+                        "prompt_preview": _debug_preview(getattr(e, "prompt", "")) if debug else "",
+                        "raw_response_preview": _debug_preview(getattr(e, "raw_response", "")) if debug else "",
                     })
                     for tx in failed_batch:
                         all_results.append({
@@ -495,6 +545,9 @@ def classify_transactions(
             prompt_template,
             body.only_expense,
             max(body.limit, 0),
+            body.debug,
+            body.start_date,
+            body.end_date,
             repo,
         ),
         media_type="text/event-stream",

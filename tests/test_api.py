@@ -227,6 +227,9 @@ class TestAIClassificationPreferences:
             "prompt_template": "只返回 JSON。分类: {categories}\n交易:\n{transactions}",
             "only_expense": False,
             "limit": 5,
+            "debug": True,
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31",
         }
 
         resp = client.post(
@@ -241,11 +244,14 @@ class TestAIClassificationPreferences:
         assert prefs_resp.status_code == 200
         prefs_data = prefs_resp.json()
         for key, value in payload.items():
-            if key == "limit":
+            if key in ("limit", "debug", "start_date", "end_date"):
                 continue
             assert prefs_data[key] == value
         assert prefs_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
         assert "limit" not in prefs_data
+        assert "debug" not in prefs_data
+        assert "start_date" not in prefs_data
+        assert "end_date" not in prefs_data
 
     def test_render_prompt_template_replaces_variables(self):
         prompt = _render_prompt_template(
@@ -311,12 +317,11 @@ class TestAIClassificationPreferences:
 
         assert categories == ["餐饮美食", "交通出行", "汽车", "母婴儿童"]
 
-    def test_summarize_error_redacts_and_truncates(self):
+    def test_summarize_error_keeps_details_and_truncates(self):
         summary = _summarize_error(RuntimeError("bad key sk-secret-value " + ("x" * 300)))
 
-        assert "sk-***" in summary
-        assert "secret-value" not in summary
-        assert len(summary) <= 240
+        assert "sk-secret-value" in summary
+        assert len(summary) <= 1000
 
 
 class TestTransactions:

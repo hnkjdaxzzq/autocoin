@@ -7,11 +7,13 @@ const AiClassification = {
     filteredResults: [],
     completeData: null,
     promptExpanded: true,
+    dateRangeExpanded: false,
     defaultPromptTemplate: "",
   },
 
   render(container) {
     AiClassification._state.promptExpanded = true;
+    AiClassification._state.dateRangeExpanded = false;
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">AI分析</h1>
@@ -30,6 +32,28 @@ const AiClassification = {
                    font-size:14px;background:var(--input-bg);color:var(--text)">
           <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
             请填写希望将数据分类的[全部]类型，不同分类之间用英文或中文逗号隔开，AI将把所有数据识别为以上分类，不保留你没有填写的类型。
+          </div>
+          <div style="margin-top:12px">
+            <button id="ai-date-range-toggle" type="button" aria-expanded="false"
+              style="display:flex;align-items:center;gap:6px;width:100%;padding:0;
+                     border:0;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer">
+              <span>选择时间范围</span>
+              <span id="ai-date-range-toggle-icon" style="font-size:16px;color:var(--text-muted)">▸</span>
+            </button>
+            <div id="ai-date-range-panel" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-muted)">
+                <span>开始日期</span>
+                <input type="date" id="ai-start-date"
+                  style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                         font-size:13px;background:var(--input-bg);color:var(--text)">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-muted)">
+                <span>结束日期</span>
+                <input type="date" id="ai-end-date"
+                  style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+                         font-size:13px;background:var(--input-bg);color:var(--text)">
+              </label>
+            </div>
           </div>
         </div>
 
@@ -64,7 +88,7 @@ const AiClassification = {
 
         <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
           <button id="ai-prompt-toggle" type="button" aria-expanded="true"
-            style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0;
+            style="display:flex;align-items:center;gap:6px;width:100%;padding:0;
                    border:0;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer">
             <span>AI Prompt</span>
             <span id="ai-prompt-toggle-icon" style="font-size:16px;color:var(--text-muted)">▾</span>
@@ -87,6 +111,11 @@ const AiClassification = {
                 <input type="text" id="ai-limit" inputmode="numeric" value="无限制"
                   style="width:120px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
                          font-size:13px;background:var(--input-bg);color:var(--text);text-align:right">
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer">
+                <input type="checkbox" id="ai-debug-mode"
+                  style="width:14px;height:14px;accent-color:var(--primary)">
+                <span>调试模式</span>
               </label>
             </div>
           </div>
@@ -111,6 +140,13 @@ const AiClassification = {
     });
     container.querySelector("#ai-api-key").addEventListener("keydown", (e) => {
       if (e.key === "Enter") btn.click();
+    });
+
+    container.querySelector("#ai-date-range-toggle").addEventListener("click", () => {
+      AiClassification._setDateRangeExpanded(
+        container,
+        !AiClassification._state.dateRangeExpanded,
+      );
     });
 
     container.querySelector("#ai-prompt-toggle").addEventListener("click", () => {
@@ -165,12 +201,25 @@ const AiClassification = {
     if (icon) icon.textContent = expanded ? "▾" : "▸";
   },
 
+  _setDateRangeExpanded(container, expanded) {
+    AiClassification._state.dateRangeExpanded = expanded;
+    const panel = container.querySelector("#ai-date-range-panel");
+    const toggle = container.querySelector("#ai-date-range-toggle");
+    const icon = container.querySelector("#ai-date-range-toggle-icon");
+    if (panel) panel.style.display = expanded ? "grid" : "none";
+    if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (icon) icon.textContent = expanded ? "▾" : "▸";
+  },
+
   async _startClassification(container) {
     const categories = container.querySelector("#ai-categories").value.trim();
     const apiKey = container.querySelector("#ai-api-key").value.trim();
     const promptTemplate = container.querySelector("#ai-prompt-template").value.trim();
     const onlyExpense = container.querySelector("#ai-only-expense").checked;
     const limit = Math.max(0, parseInt(container.querySelector("#ai-limit").value, 10) || 0);
+    const debug = container.querySelector("#ai-debug-mode").checked;
+    const startDate = container.querySelector("#ai-start-date").value;
+    const endDate = container.querySelector("#ai-end-date").value;
 
     if (!categories) {
       AiClassification._showToast("请填写分类");
@@ -235,6 +284,9 @@ const AiClassification = {
           prompt_template: promptTemplate,
           only_expense: onlyExpense,
           limit: limit,
+          debug: debug,
+          start_date: startDate || null,
+          end_date: endDate || null,
         }),
         signal: controller.signal,
       });
@@ -573,7 +625,19 @@ const AiClassification = {
       const totalB = item.total_batches || totalBatches || "?";
       const count = item.count || 0;
       const reason = AiClassification._escapeHtml(item.reason || "未知错误");
-      return `<div>第 ${batch}/${totalB} 批（${count} 条）：${reason}</div>`;
+      const prompt = item.prompt_preview ? `
+        <details style="margin-top:4px">
+          <summary style="cursor:pointer">本批 Prompt</summary>
+          <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
+                      border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.prompt_preview)}</pre>
+        </details>` : "";
+      const raw = item.raw_response_preview ? `
+        <details style="margin-top:4px">
+          <summary style="cursor:pointer">DeepSeek 原始返回</summary>
+          <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
+                      border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.raw_response_preview)}</pre>
+        </details>` : "";
+      return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条）：${reason}${prompt}${raw}</div>`;
     }).join("");
     return `<div style="margin-top:6px"><strong>失败详情（最近 ${recent.length} 条）</strong>${rows}</div>`;
   },
