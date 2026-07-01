@@ -12,6 +12,8 @@ from autocoin.routers.ai_classification import (
     _filter_classifiable_transactions,
     _normalize_ai_result_item,
     _parse_categories,
+    _request_debug_preview,
+    _response_debug_preview,
     _render_prompt_template,
     _summarize_error,
 )
@@ -323,6 +325,55 @@ class TestAIClassificationPreferences:
 
         assert "sk-secret-value" in summary
         assert len(summary) <= 1000
+
+    def test_response_debug_preview_includes_finish_reason_and_usage(self):
+        class Message:
+            role = "assistant"
+            content = ""
+
+            def model_dump(self, exclude_none=True):
+                return {"role": self.role, "content": self.content}
+
+        class Choice:
+            index = 0
+            finish_reason = "stop"
+            message = Message()
+
+        class Usage:
+            def model_dump(self, exclude_none=True):
+                return {"prompt_tokens": 12, "completion_tokens": 0}
+
+        class Response:
+            id = "resp-1"
+            model = "deepseek-v4-flash"
+            created = 123
+            object = "chat.completion"
+            choices = [Choice()]
+            usage = Usage()
+
+        preview = _response_debug_preview(Response())
+
+        assert '"finish_reason": "stop"' in preview
+        assert '"content_length": 0' in preview
+        assert '"prompt_tokens": 12' in preview
+
+    def test_request_debug_preview_includes_batch_request_data(self):
+        preview = _request_debug_preview(
+            "请分类\n1|餐饮|商户|商品",
+            [{
+                "id": 1,
+                "category": "餐饮",
+                "counterparty": "商户|A",
+                "product": "商品\nB",
+            }],
+            ["餐饮", "交通"],
+        )
+
+        assert '"model": "deepseek-v4-flash"' in preview
+        assert '"batch_transaction_count": 1' in preview
+        assert '"batch_transaction_ids": [' in preview
+        assert "1|餐饮|商户 A|商品 B" in preview
+        assert "api_key" not in preview
 
 
 class TestTransactions:

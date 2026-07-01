@@ -633,13 +633,25 @@ const AiClassification = {
           <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
                       border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.prompt_preview)}</pre>
         </details>` : "";
+      const requestDebug = item.request_debug_preview ? `
+        <details style="margin-top:4px">
+          <summary style="cursor:pointer">DeepSeek 请求内容</summary>
+          <pre style="white-space:pre-wrap;overflow:auto;max-height:260px;margin:6px 0 0;padding:8px;
+                      border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.request_debug_preview)}</pre>
+        </details>` : "";
       const raw = item.raw_response_preview ? `
         <details style="margin-top:4px">
           <summary style="cursor:pointer">DeepSeek 原始返回</summary>
           <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
                       border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.raw_response_preview)}</pre>
         </details>` : "";
-      return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条）：${reason}${prompt}${raw}</div>`;
+      const responseDebug = item.response_debug_preview ? `
+        <details style="margin-top:4px">
+          <summary style="cursor:pointer">DeepSeek 响应元信息</summary>
+          <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
+                      border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.response_debug_preview)}</pre>
+        </details>` : "";
+      return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条）：${reason}${prompt}${requestDebug}${raw}${responseDebug}</div>`;
     }).join("");
     return `<div style="margin-top:6px"><strong>失败详情（最近 ${recent.length} 条）</strong>${rows}</div>`;
   },

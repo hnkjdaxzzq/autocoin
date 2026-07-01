@@ -400,7 +400,7 @@ autocoin-t/
 - AI Prompt 默认展开展示，默认模板为中文精简分类规则；接口协议部分使用 `{category_map}`、`{transactions}`
 - 偏好接口返回 `default_prompt_template`，前端“重置为默认Prompt”按钮用它恢复文本框内容
 - “重置为默认Prompt”右侧的“本次最多处理”是 `/classify` 的一次性 `limit` 参数，`0` 表示不限制，不写入 `user_preferences`
-- “调试模式”是 `/classify` 的一次性 `debug` 参数，默认关闭，不写入 `user_preferences`；开启后失败详情包含本批 Prompt 和 DeepSeek 原始返回片段
+- “调试模式”是 `/classify` 的一次性 `debug` 参数，默认关闭，不写入 `user_preferences`；开启后失败详情包含本批 Prompt、DeepSeek 请求内容、原始返回片段和响应元信息；请求内容包含批次交易数据但不包含 API key
 - 分类输入框说明下方有默认收起的“选择时间范围”区域；开始/结束日期是 `/classify` 的一次性 `start_date` / `end_date` 参数，默认不选表示全部日期，不写入 `user_preferences`
 - 默认输入协议使用分类编号和紧凑交易行：`id|当前分类|交易对方|商品说明`；不发送备注、金额、时间、订单号等其他字段
 - 默认输出协议为 `{"t":[[id,分类编号]]}`，后端会映射回分类名称；不兼容旧版对象格式或字符串分类

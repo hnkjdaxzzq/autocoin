@@ -87,10 +87,19 @@ class ConfirmResponse(BaseModel):
 
 
 class AIClassificationBatchError(Exception):
-    def __init__(self, message: str, prompt: str = "", raw_response: str = ""):
+    def __init__(
+        self,
+        message: str,
+        prompt: str = "",
+        raw_response: str = "",
+        response_debug: str = "",
+        request_debug: str = "",
+    ):
         super().__init__(message)
         self.prompt = prompt
         self.raw_response = raw_response
+        self.response_debug = response_debug
+        self.request_debug = request_debug
 
 
 def get_repo(
@@ -144,14 +153,15 @@ def _clean_prompt_field(value) -> str:
     return str(value or "").replace("|", " ").replace("\n", " ").strip()
 
 
+def _transaction_line(tx: dict) -> str:
+    old_cat = _clean_prompt_field(tx.get("category"))
+    counterparty = _clean_prompt_field(tx.get("counterparty"))
+    product = _clean_prompt_field(tx.get("product"))
+    return f'{tx["id"]}|{old_cat}|{counterparty}|{product}'
+
+
 def _build_transaction_prompt_lines(transactions: list[dict]) -> str:
-    lines = []
-    for tx in transactions:
-        old_cat = _clean_prompt_field(tx.get("category"))
-        counterparty = _clean_prompt_field(tx.get("counterparty"))
-        product = _clean_prompt_field(tx.get("product"))
-        lines.append(f'{tx["id"]}|{old_cat}|{counterparty}|{product}')
-    return "\n".join(lines)
+    return "\n".join(_transaction_line(tx) for tx in transactions)
 
 
 def _filter_classifiable_transactions(
@@ -238,6 +248,66 @@ def _debug_preview(content: str) -> str:
     return text
 
 
+def _response_debug_preview(response) -> str:
+    """Summarize DeepSeek response metadata for debugging empty/invalid content."""
+    if response is None:
+        return ""
+    choices = []
+    for choice in getattr(response, "choices", []) or []:
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None) if message else None
+        if hasattr(message, "model_dump"):
+            message_keys = sorted(message.model_dump(exclude_none=True).keys())
+        else:
+            message_keys = []
+        choices.append({
+            "index": getattr(choice, "index", None),
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "message_role": getattr(message, "role", None) if message else None,
+            "content_length": len(content or ""),
+            "content_preview": _content_preview(content or ""),
+            "message_keys": message_keys,
+        })
+
+    usage = getattr(response, "usage", None)
+    if hasattr(usage, "model_dump"):
+        usage_payload = usage.model_dump(exclude_none=True)
+    elif usage is not None:
+        usage_payload = str(usage)
+    else:
+        usage_payload = None
+
+    payload = {
+        "id": getattr(response, "id", None),
+        "model": getattr(response, "model", None),
+        "created": getattr(response, "created", None),
+        "object": getattr(response, "object", None),
+        "choices": choices,
+        "usage": usage_payload,
+    }
+    return _debug_preview(json.dumps(payload, ensure_ascii=False, default=str, indent=2))
+
+
+def _request_debug_preview(prompt: str, transactions: list[dict], categories: list[str]) -> str:
+    payload = {
+        "base_url": "https://api.deepseek.com",
+        "model": "deepseek-v4-flash",
+        "timeout_seconds": 60,
+        "max_retries": 0,
+        "response_format": {"type": "json_object"},
+        "temperature": 0.1,
+        "max_tokens": 4096,
+        "system_message": "You are a precise transaction classifier. Always respond with valid JSON only.",
+        "category_map": _build_category_map(categories),
+        "batch_transaction_count": len(transactions),
+        "batch_transaction_ids": [tx.get("id") for tx in transactions],
+        "transaction_line_format": "id|当前分类|交易对方|商品说明",
+        "transaction_lines": [_transaction_line(tx) for tx in transactions],
+        "user_prompt": prompt,
+    }
+    return _debug_preview(json.dumps(payload, ensure_ascii=False, default=str, indent=2))
+
+
 @router.get("/preferences", response_model=AIClassificationPreferences)
 def get_ai_classification_preferences(repo: SQLiteRepository = Depends(get_repo)):
     prefs = repo.get_user_preference(
@@ -267,6 +337,7 @@ def _classify_batch(
     """Send one batch of transactions to DeepSeek for classification."""
     prompt = _render_prompt_template(prompt_template, transactions, categories)
     category_map = _build_category_map(categories)
+    request_debug = _request_debug_preview(prompt, transactions, categories) if debug else ""
 
     for attempt in range(MAX_RETRIES):
         try:
@@ -290,6 +361,7 @@ def _classify_batch(
                 max_tokens=4096,
             )
             content = response.choices[0].message.content.strip()
+            response_debug = _response_debug_preview(response) if debug else ""
             try:
                 parsed = json.loads(content)
             except json.JSONDecodeError as e:
@@ -297,6 +369,8 @@ def _classify_batch(
                     f"AI returned non-JSON content: {_content_preview(content)}",
                     prompt=prompt if debug else "",
                     raw_response=content if debug else "",
+                    response_debug=response_debug,
+                    request_debug=request_debug,
                 ) from e
 
             transactions_result = _find_transactions_result(parsed)
@@ -307,6 +381,8 @@ def _classify_batch(
                     f"Unexpected response format: {_content_preview(content)}",
                     prompt=prompt if debug else "",
                     raw_response=content if debug else "",
+                    response_debug=response_debug,
+                    request_debug=request_debug,
                 )
 
             # Validate and map results
@@ -337,6 +413,8 @@ def _classify_batch(
                     f"AI returned {invalid_count} invalid classification item(s), examples: {examples}",
                     prompt=prompt if debug else "",
                     raw_response=content if debug else "",
+                    response_debug=response_debug,
+                    request_debug=request_debug,
                 )
             if tx_map:
                 missing_ids = list(tx_map.keys())[:5]
@@ -344,6 +422,8 @@ def _classify_batch(
                     f"AI missed {len(tx_map)} transaction(s), sample ids: {missing_ids}",
                     prompt=prompt if debug else "",
                     raw_response=content if debug else "",
+                    response_debug=response_debug,
+                    request_debug=request_debug,
                 )
 
             # Fill in any records DeepSeek missed with original category.
@@ -464,7 +544,9 @@ def _classify_stream(
                         "count": len(failed_batch),
                         "reason": _summarize_error(e),
                         "prompt_preview": _debug_preview(getattr(e, "prompt", "")) if debug else "",
+                        "request_debug_preview": _debug_preview(getattr(e, "request_debug", "")) if debug else "",
                         "raw_response_preview": _debug_preview(getattr(e, "raw_response", "")) if debug else "",
+                        "response_debug_preview": _debug_preview(getattr(e, "response_debug", "")) if debug else "",
                     })
                     for tx in failed_batch:
                         all_results.append({
