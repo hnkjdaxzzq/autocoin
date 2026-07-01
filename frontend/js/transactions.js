@@ -8,6 +8,9 @@ const Transactions = {
     filters: {},
     selectedIds: new Set(),
     categories: [],
+    paymentMethods: [],
+    sort_by: "transaction_time",
+    sort_dir: "desc",
   },
   _sourceOptions: [
     "alipay",
@@ -130,6 +133,11 @@ const Transactions = {
             <option value="">全部</option>
           </select>
         </label>
+        <label>支付方式
+          <select id="f-payment-method">
+            <option value="">全部</option>
+          </select>
+        </label>
         <input type="text" id="f-search" placeholder="搜索对方/商品/备注…" style="min-width:180px">
         <button class="btn btn-primary" id="btn-search">搜索</button>
         <button class="btn btn-ghost" id="btn-reset">重置</button>
@@ -160,6 +168,7 @@ const Transactions = {
     Transactions._bindExport(container);
     Transactions._bindBatch(container);
     Transactions._loadCategories(container);
+    Transactions._loadPaymentMethods(container);
     Transactions._load(container);
   },
 
@@ -182,6 +191,20 @@ const Transactions = {
         const current = filterSel.value;
         filterSel.innerHTML = '<option value="">全部</option>' +
           Transactions._state.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+        filterSel.value = current;
+      }
+    } catch (_) {}
+  },
+
+  async _loadPaymentMethods(container) {
+    try {
+      const res = await API.transactions.paymentMethods();
+      Transactions._state.paymentMethods = res.payment_methods || [];
+      const filterSel = container.querySelector("#f-payment-method");
+      if (filterSel) {
+        const current = filterSel.value;
+        filterSel.innerHTML = '<option value="">全部</option>' +
+          Transactions._state.paymentMethods.map(m => `<option value="${m}">${m}</option>`).join("");
         filterSel.value = current;
       }
     } catch (_) {}
@@ -267,6 +290,7 @@ const Transactions = {
       container.querySelector("#f-direction").value = "";
       container.querySelector("#f-source").value = "";
       container.querySelector("#f-category").value = "";
+      container.querySelector("#f-payment-method").value = "";
       container.querySelector("#f-search").value = "";
       Transactions._state.page = 1;
       Transactions._load(container);
@@ -351,6 +375,7 @@ const Transactions = {
       direction: container.querySelector("#f-direction").value || "",
       source: container.querySelector("#f-source").value || "",
       category: container.querySelector("#f-category").value || "",
+      payment_method: container.querySelector("#f-payment-method").value || "",
       search: container.querySelector("#f-search").value || "",
     };
   },
@@ -364,6 +389,8 @@ const Transactions = {
         ...filters,
         page: Transactions._state.page,
         page_size: Transactions._state.page_size,
+        sort_by: Transactions._state.sort_by,
+        sort_dir: Transactions._state.sort_dir,
       });
       Transactions._state.total = data.total;
       Transactions._state.total_pages = data.total_pages;
@@ -409,15 +436,15 @@ const Transactions = {
         <thead>
           <tr>
             <th style="width:40px"><input type="checkbox" id="tx-select-all" title="全选"></th>
-            <th>时间</th>
-            <th>来源</th>
-            <th>分类</th>
-            <th>交易对方</th>
-            <th>商品</th>
-            <th>方向</th>
-            <th>金额</th>
-            <th>支付方式</th>
-            <th>备注</th>
+            ${Transactions._sortHeader("时间", "transaction_time")}
+            ${Transactions._sortHeader("来源", "source")}
+            ${Transactions._sortHeader("分类", "category")}
+            ${Transactions._sortHeader("交易对方", "counterparty")}
+            ${Transactions._sortHeader("商品", "product")}
+            ${Transactions._sortHeader("方向", "direction")}
+            ${Transactions._sortHeader("金额", "amount")}
+            ${Transactions._sortHeader("支付方式", "payment_method")}
+            ${Transactions._sortHeader("备注", "remark")}
             <th>操作</th>
           </tr>
         </thead>
@@ -450,8 +477,12 @@ const Transactions = {
                 ${tx.remark || "—"}
               </td>
               <td>
+                <div class="tx-actions">
                 <button class="btn btn-danger btn-sm btn-delete" data-id="${tx.id}"
                   style="padding:2px 8px;font-size:12px">删除</button>
+                  <button class="btn btn-ghost btn-sm btn-neutral" data-id="${tx.id}"
+                    style="padding:2px 8px;font-size:12px">不计</button>
+                </div>
               </td>
             </tr>`).join("")}
         </tbody>
@@ -486,6 +517,21 @@ const Transactions = {
       cell.addEventListener("click", () => Transactions._inlineEdit(cell, container));
     });
 
+    // Bind sort buttons
+    wrap.querySelectorAll(".tx-sort-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const field = btn.dataset.sortBy;
+        if (Transactions._state.sort_by === field) {
+          Transactions._state.sort_dir = Transactions._state.sort_dir === "asc" ? "desc" : "asc";
+        } else {
+          Transactions._state.sort_by = field;
+          Transactions._state.sort_dir = "asc";
+        }
+        Transactions._state.page = 1;
+        Transactions._load(container);
+      });
+    });
+
     // Bind delete buttons
     wrap.querySelectorAll(".btn-delete").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -495,6 +541,18 @@ const Transactions = {
           Transactions._load(container);
         } catch (err) {
           alert("删除失败: " + err.message);
+        }
+      });
+    });
+
+    // Bind neutral buttons
+    wrap.querySelectorAll(".btn-neutral").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await API.transactions.update(parseInt(btn.dataset.id), { direction: "neutral" });
+          Transactions._load(container);
+        } catch (err) {
+          alert("更新失败: " + err.message);
         }
       });
     });
@@ -511,6 +569,19 @@ const Transactions = {
     });
 
     Transactions._updateBatchBar(container);
+  },
+
+  _sortHeader(label, field) {
+    const active = Transactions._state.sort_by === field;
+    const dir = Transactions._state.sort_dir;
+    const arrow = active ? (dir === "asc" ? "↑" : "↓") : "↕";
+    return `
+      <th>
+        <button type="button" class="tx-sort-btn ${active ? "active" : ""}" data-sort-by="${field}" aria-label="按${label}排序">
+          <span>${label}</span><span class="tx-sort-arrow">${arrow}</span>
+        </button>
+      </th>
+    `;
   },
 
   _renderPagination(data) {

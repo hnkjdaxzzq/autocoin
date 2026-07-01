@@ -79,6 +79,7 @@ const API = {
         body: JSON.stringify(body),
       }),
     categories: () => apiFetch("/transactions/categories"),
+    paymentMethods: () => apiFetch("/transactions/payment-methods"),
     batchDelete: (ids) =>
       apiFetch("/transactions/batch/delete", {
         method: "POST",

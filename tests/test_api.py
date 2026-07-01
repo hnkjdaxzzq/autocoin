@@ -254,6 +254,151 @@ class TestTransactions:
         assert resp.status_code == 200
         assert "categories" in resp.json()
 
+    def test_filter_by_payment_method_updates_summary(self, client, auth_headers):
+        wx_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-20 10:00:00",
+            "direction": "expense",
+            "amount": 12,
+            "payment_method": "AUTOPAY_FILTER_WX",
+        })
+        card_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-20 11:00:00",
+            "direction": "expense",
+            "amount": 88,
+            "payment_method": "AUTOPAY_FILTER_CARD",
+        })
+        assert wx_resp.status_code == 201
+        assert card_resp.status_code == 201
+
+        resp = client.get(
+            "/api/v1/transactions?payment_method=AUTOPAY_FILTER_WX",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = [item["id"] for item in data["items"]]
+        assert wx_resp.json()["id"] in ids
+        assert card_resp.json()["id"] not in ids
+        assert data["summary"]["total_count"] == data["total"]
+        assert data["summary"]["total_expense"] == 12
+
+    def test_payment_methods(self, client, auth_headers):
+        keep_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-21 10:00:00",
+            "direction": "expense",
+            "amount": 10,
+            "payment_method": "测试卡",
+        })
+        dup_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-21 11:00:00",
+            "direction": "expense",
+            "amount": 11,
+            "payment_method": "测试卡",
+        })
+        empty_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-21 12:00:00",
+            "direction": "expense",
+            "amount": 12,
+            "payment_method": "",
+        })
+        deleted_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-21 13:00:00",
+            "direction": "expense",
+            "amount": 13,
+            "payment_method": "已删除卡",
+        })
+        other_register_resp = client.post("/api/v1/auth/register", json={
+            "username": "paymentmethodscopeuser",
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert other_register_resp.status_code == 201
+        other_headers = {"Authorization": f"Bearer {other_register_resp.json()['access_token']}"}
+        other_resp = client.post("/api/v1/transactions", headers=other_headers, json={
+            "transaction_time": "2025-01-21 14:00:00",
+            "direction": "expense",
+            "amount": 14,
+            "payment_method": "其他用户卡",
+        })
+        assert keep_resp.status_code == 201
+        assert dup_resp.status_code == 201
+        assert empty_resp.status_code == 201
+        assert deleted_resp.status_code == 201
+        assert other_resp.status_code == 201
+        client.delete(f"/api/v1/transactions/{deleted_resp.json()['id']}", headers=auth_headers)
+
+        resp = client.get("/api/v1/transactions/payment-methods", headers=auth_headers)
+        assert resp.status_code == 200
+        methods = resp.json()["payment_methods"]
+        assert methods.count("测试卡") == 1
+        assert "" not in methods
+        assert "已删除卡" not in methods
+        assert "其他用户卡" not in methods
+
+    def test_sort_transactions(self, client, auth_headers):
+        low_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-22 10:00:00",
+            "direction": "expense",
+            "amount": 1,
+            "payment_method": "B卡",
+        })
+        high_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-22 11:00:00",
+            "direction": "expense",
+            "amount": 99,
+            "payment_method": "A卡",
+        })
+        assert low_resp.status_code == 201
+        assert high_resp.status_code == 201
+
+        amount_resp = client.get(
+            "/api/v1/transactions?start_date=2025-01-22&end_date=2025-01-22&sort_by=amount&sort_dir=desc",
+            headers=auth_headers,
+        )
+        assert amount_resp.status_code == 200
+        assert [item["id"] for item in amount_resp.json()["items"]][:2] == [
+            high_resp.json()["id"],
+            low_resp.json()["id"],
+        ]
+
+        payment_resp = client.get(
+            "/api/v1/transactions?start_date=2025-01-22&end_date=2025-01-22&sort_by=payment_method&sort_dir=asc",
+            headers=auth_headers,
+        )
+        assert payment_resp.status_code == 200
+        assert [item["id"] for item in payment_resp.json()["items"]][:2] == [
+            high_resp.json()["id"],
+            low_resp.json()["id"],
+        ]
+
+    def test_update_direction_to_neutral_updates_summary(self, client, auth_headers):
+        create_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-23 10:00:00",
+            "direction": "expense",
+            "amount": 33,
+            "payment_method": "不计测试卡",
+        })
+        assert create_resp.status_code == 201
+        tx_id = create_resp.json()["id"]
+
+        update_resp = client.put(f"/api/v1/transactions/{tx_id}", headers=auth_headers, json={
+            "direction": "neutral",
+        })
+        assert update_resp.status_code == 200
+        assert update_resp.json()["direction"] == "neutral"
+
+        list_resp = client.get(
+            "/api/v1/transactions?payment_method=%E4%B8%8D%E8%AE%A1%E6%B5%8B%E8%AF%95%E5%8D%A1",
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200
+        data = list_resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["direction"] == "neutral"
+        assert data["summary"]["total_income"] == 0
+        assert data["summary"]["total_expense"] == 0
+        assert data["summary"]["balance"] == 0
+
     def test_batch_delete(self, client, auth_headers):
         # Create 3 transactions
         ids = []

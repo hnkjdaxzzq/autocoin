@@ -196,6 +196,7 @@ class SQLiteRepository(DataRepository):
         end_date=None,
         direction=None,
         category=None,
+        payment_method=None,
         source=None,
         search=None,
         include_deleted: bool = False,
@@ -213,6 +214,8 @@ class SQLiteRepository(DataRepository):
             q = q.filter(Transaction.direction == direction)
         if category:
             q = q.filter(Transaction.category.ilike(f"%{category}%"))
+        if payment_method:
+            q = q.filter(Transaction.payment_method.ilike(f"%{payment_method}%"))
         q = _apply_source_filter(q, source)
         if search:
             q = q.filter(
@@ -234,6 +237,7 @@ class SQLiteRepository(DataRepository):
         end_date: Optional[str] = None,
         direction: Optional[str] = None,
         category: Optional[str] = None,
+        payment_method: Optional[str] = None,
         source: Optional[str] = None,
         search: Optional[str] = None,
         sort_by: str = "transaction_time",
@@ -245,6 +249,7 @@ class SQLiteRepository(DataRepository):
             end_date,
             direction,
             category,
+            payment_method,
             source,
             search,
             include_deleted=include_deleted,
@@ -324,6 +329,7 @@ class SQLiteRepository(DataRepository):
         end_date=None,
         direction=None,
         category=None,
+        payment_method=None,
         source=None,
         search=None,
         include_deleted: bool = False,
@@ -333,6 +339,7 @@ class SQLiteRepository(DataRepository):
             end_date,
             direction,
             category,
+            payment_method,
             source,
             search,
             include_deleted=include_deleted,
@@ -389,6 +396,22 @@ class SQLiteRepository(DataRepository):
         )
         q = _apply_source_filter(q, source)
         rows = q.distinct().order_by(Transaction.category).all()
+        return [r[0] for r in rows]
+
+    def list_payment_methods(self) -> list[str]:
+        """Return distinct non-empty payment methods for this user."""
+        rows = (
+            self._db.query(Transaction.payment_method)
+            .filter(
+                Transaction.user_id == self._user_id,
+                Transaction.is_deleted == 0,
+                Transaction.payment_method != None,
+                Transaction.payment_method != "",
+            )
+            .distinct()
+            .order_by(Transaction.payment_method)
+            .all()
+        )
         return [r[0] for r in rows]
 
     def bulk_insert_transactions(
@@ -634,7 +657,14 @@ class SQLiteRepository(DataRepository):
         source=None,
         search: Optional[str] = None,
     ) -> list[dict]:
-        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = self._build_filter_query(
+            start_date=start_date,
+            end_date=end_date,
+            direction=direction,
+            category=category,
+            source=source,
+            search=search,
+        )
         q = q.filter(Transaction.direction == "income")
 
         rows = (
@@ -673,7 +703,14 @@ class SQLiteRepository(DataRepository):
             func.nullif(Transaction.product, ""),
             "未命名商品",
         )
-        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = self._build_filter_query(
+            start_date=start_date,
+            end_date=end_date,
+            direction=direction,
+            category=category,
+            source=source,
+            search=search,
+        )
         q = q.filter(Transaction.direction == "income")
 
         rows = (

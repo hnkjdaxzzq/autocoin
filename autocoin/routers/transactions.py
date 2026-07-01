@@ -37,6 +37,7 @@ def list_transactions(
     end_date: Optional[str] = None,
     direction: Optional[str] = None,
     category: Optional[str] = None,
+    payment_method: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
     sort_by: str = "transaction_time",
@@ -52,6 +53,7 @@ def list_transactions(
         end_date=end_date,
         direction=direction,
         category=category,
+        payment_method=payment_method,
         source=source,
         search=search,
         sort_by=sort_by,
@@ -63,6 +65,7 @@ def list_transactions(
         end_date=end_date,
         direction=direction,
         category=category,
+        payment_method=payment_method,
         source=source,
         search=search,
         include_deleted=include_deleted,
@@ -98,6 +101,7 @@ def export_csv(
     end_date: Optional[str] = None,
     direction: Optional[str] = None,
     category: Optional[str] = None,
+    payment_method: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
     repo: SQLiteRepository = Depends(get_repo),
@@ -107,7 +111,7 @@ def export_csv(
     items, _ = repo.list_transactions(
         page=1, page_size=100000,
         start_date=start_date, end_date=end_date,
-        direction=direction, category=category,
+        direction=direction, category=category, payment_method=payment_method,
         source=source, search=search,
         sort_by="transaction_time", sort_dir="desc",
     )
@@ -143,6 +147,7 @@ def export_excel(
     end_date: Optional[str] = None,
     direction: Optional[str] = None,
     category: Optional[str] = None,
+    payment_method: Optional[str] = None,
     source: Optional[str] = None,
     search: Optional[str] = None,
     repo: SQLiteRepository = Depends(get_repo),
@@ -152,7 +157,7 @@ def export_excel(
     items, _ = repo.list_transactions(
         page=1, page_size=100000,
         start_date=start_date, end_date=end_date,
-        direction=direction, category=category,
+        direction=direction, category=category, payment_method=payment_method,
         source=source, search=search,
         sort_by="transaction_time", sort_dir="desc",
     )
@@ -190,6 +195,13 @@ def list_categories(repo: SQLiteRepository = Depends(get_repo)):
     """Return distinct categories for current user."""
     categories = repo.list_categories()
     return {"categories": categories}
+
+
+@router.get("/payment-methods")
+def list_payment_methods(repo: SQLiteRepository = Depends(get_repo)):
+    """Return distinct payment methods for current user."""
+    payment_methods = repo.list_payment_methods()
+    return {"payment_methods": payment_methods}
 
 
 @router.post("/batch/delete")
