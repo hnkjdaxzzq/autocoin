@@ -260,10 +260,14 @@ const Stats = {
       return;
     }
 
+    const startDate = container.querySelector("#cat-start").value;
+    const endDate = container.querySelector("#cat-end").value;
+    const days = dateRangeDays(startDate, endDate);
+
     // Store current filter params for drill-down queries
     Stats._catParams = {
-      start_date: container.querySelector("#cat-start").value,
-      end_date: container.querySelector("#cat-end").value,
+      start_date: startDate,
+      end_date: endDate,
       direction: container.querySelector("#cat-direction").value,
     };
 
@@ -274,6 +278,7 @@ const Stats = {
             <th style="width:24px"></th>
             <th>分类</th>
             <th>金额</th>
+            <th>月均金额</th>
             <th>笔数</th>
             <th>占比</th>
           </tr>
@@ -284,6 +289,7 @@ const Stats = {
               <td><span class="expand-icon">&#9654;</span></td>
               <td>${item.category || "其他"}</td>
               <td style="font-weight:600">${fmtMoney(item.amount)}</td>
+              <td>${fmtMoney(item.amount / days * 30)}</td>
               <td>${item.count}</td>
               <td>
                 <div style="display:flex;align-items:center;justify-content:center;gap:8px">
@@ -293,7 +299,7 @@ const Stats = {
               </td>
             </tr>
             <tr class="cat-detail-row" data-idx="${idx}" style="display:none">
-              <td colspan="5">
+              <td colspan="6">
                 <div class="cat-detail-wrap" id="cat-detail-${idx}"></div>
               </td>
             </tr>
@@ -302,6 +308,7 @@ const Stats = {
             <td></td>
             <td>合计</td>
             <td>${fmtMoney(data.total)}</td>
+            <td>${fmtMoney(data.total / days * 30)}</td>
             <td>${data.items.reduce((s, i) => s + i.count, 0)}</td>
             <td>100%</td>
           </tr>
