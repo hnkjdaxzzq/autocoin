@@ -23,6 +23,7 @@ class TransactionResponse(BaseModel):
     remark: Optional[str] = None
     import_batch_id: Optional[str] = None
     is_deleted: int = 0
+    finishrefundcheck: int = 0
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

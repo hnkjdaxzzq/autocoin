@@ -44,6 +44,9 @@ def _ensure_lightweight_migrations():
         if "product_alias" not in tx_columns:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN product_alias VARCHAR(128)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_product_alias ON transactions (product_alias)"))
+        if "finishrefundcheck" not in tx_columns:
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN finishrefundcheck INTEGER NOT NULL DEFAULT 0"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_finishrefundcheck ON transactions (finishrefundcheck)"))
 
 
 def get_db():

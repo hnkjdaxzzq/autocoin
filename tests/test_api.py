@@ -471,6 +471,206 @@ class TestTransactions:
         assert resp.status_code in (401, 403)  # No token → depends on FastAPI version
 
 
+class TestSpecialDataProcessingRefunds:
+    def _create_tx(self, client, headers, **overrides):
+        payload = {
+            "transaction_time": "2025-03-01 10:00:00",
+            "direction": "expense",
+            "amount": 10,
+            "source": "wechat",
+            "counterparty": "退款测试商户",
+            "product": "退款测试商品",
+            "payment_method": "退款测试卡",
+        }
+        payload.update(overrides)
+        resp = client.post("/api/v1/transactions", headers=headers, json=payload)
+        assert resp.status_code == 201
+        return resp.json()
+
+    def test_wechat_multiple_candidates_confirm_marks_only_selected_expense(self, client, auth_headers):
+        older_expense = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-08 10:00:00",
+            direction="expense",
+            amount=66,
+            source="wechat",
+            payment_method="多候选卡",
+        )
+        newer_expense = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-09 10:00:00",
+            direction="expense",
+            amount=66,
+            source="wechat",
+            payment_method="多候选卡",
+        )
+        refund = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-10 10:00:00",
+            direction="income",
+            amount=66,
+            source="wechat",
+            payment_method="多候选卡",
+        )
+
+        search_resp = client.post("/api/v1/special-data-processing/refunds/search", headers=auth_headers)
+        assert search_resp.status_code == 200
+        items = [
+            item for item in search_resp.json()["items"]
+            if item["refund_transaction"]["id"] == refund["id"]
+        ]
+        assert len(items) == 1
+        candidate_ids = [tx["id"] for tx in items[0]["expense_candidates"]]
+        assert candidate_ids[:2] == [newer_expense["id"], older_expense["id"]]
+
+        confirm_resp = client.post(
+            "/api/v1/special-data-processing/refunds/confirm",
+            headers=auth_headers,
+            json={
+                "items": [{
+                    "refund_id": refund["id"],
+                    "selected_expense_id": older_expense["id"],
+                    "mark_neutral": True,
+                }]
+            },
+        )
+        assert confirm_resp.status_code == 200
+
+        refund_after = client.get(f"/api/v1/transactions/{refund['id']}", headers=auth_headers).json()
+        older_after = client.get(f"/api/v1/transactions/{older_expense['id']}", headers=auth_headers).json()
+        newer_after = client.get(f"/api/v1/transactions/{newer_expense['id']}", headers=auth_headers).json()
+        assert refund_after["direction"] == "neutral"
+        assert older_after["direction"] == "neutral"
+        assert newer_after["direction"] == "expense"
+        assert refund_after["finishrefundcheck"] == 1
+        assert older_after["finishrefundcheck"] == 1
+        assert newer_after["finishrefundcheck"] == 0
+
+    def test_unchecked_refund_marks_check_without_neutralizing(self, client, auth_headers):
+        expense = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-11 10:00:00",
+            direction="expense",
+            amount=22,
+            source="alipay",
+            counterparty="不勾选测试商户",
+            product="Coffee-Shop: Latte",
+            payment_method="不勾选测试卡",
+        )
+        refund = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-12 10:00:00",
+            direction="income",
+            amount=22,
+            source="alipay",
+            counterparty="不勾选测试商户",
+            product="退款- coffee－shop： LATTE",
+            payment_method="不勾选测试卡",
+        )
+
+        confirm_resp = client.post(
+            "/api/v1/special-data-processing/refunds/confirm",
+            headers=auth_headers,
+            json={
+                "items": [{
+                    "refund_id": refund["id"],
+                    "selected_expense_id": expense["id"],
+                    "mark_neutral": False,
+                }]
+            },
+        )
+        assert confirm_resp.status_code == 200
+
+        refund_after = client.get(f"/api/v1/transactions/{refund['id']}", headers=auth_headers).json()
+        expense_after = client.get(f"/api/v1/transactions/{expense['id']}", headers=auth_headers).json()
+        assert refund_after["direction"] == "income"
+        assert expense_after["direction"] == "expense"
+        assert refund_after["finishrefundcheck"] == 1
+        assert expense_after["finishrefundcheck"] == 1
+
+    def test_hsbc_pulse_requires_amount_and_supports_product_normalization(self, client, auth_headers):
+        matched_expense = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-13 10:00:00",
+            direction="expense",
+            amount=88,
+            source="汇丰PULSE",
+            counterparty="HSBC归一化商户",
+            product="ABC-Shop: Latte (Grande)",
+            payment_method="HSBC测试卡",
+        )
+        self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-13 11:00:00",
+            direction="expense",
+            amount=99,
+            source="汇丰PULSE",
+            counterparty="HSBC归一化商户",
+            product="ABC-Shop: Latte (Grande)",
+            payment_method="HSBC测试卡",
+        )
+        refund = self._create_tx(
+            client,
+            auth_headers,
+            transaction_time="2025-03-14 10:00:00",
+            direction="income",
+            amount=88,
+            source="汇丰PULSE",
+            counterparty="HSBC归一化商户",
+            product="ａｂｃ－ｓｈｏｐ： latte （grande） 退款",
+            payment_method="HSBC测试卡",
+        )
+
+        search_resp = client.post("/api/v1/special-data-processing/refunds/search", headers=auth_headers)
+        assert search_resp.status_code == 200
+        items = [
+            item for item in search_resp.json()["items"]
+            if item["refund_transaction"]["id"] == refund["id"]
+        ]
+        assert len(items) == 1
+        assert [tx["id"] for tx in items[0]["expense_candidates"]] == [matched_expense["id"]]
+
+    def test_refund_search_is_user_scoped(self, client, auth_headers):
+        register_resp = client.post("/api/v1/auth/register", json={
+            "username": "refundscopeuser",
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert register_resp.status_code == 201
+        other_headers = {"Authorization": f"Bearer {register_resp.json()['access_token']}"}
+
+        self._create_tx(
+            client,
+            other_headers,
+            transaction_time="2025-03-15 10:00:00",
+            direction="expense",
+            amount=44,
+            source="wechat",
+            payment_method="隔离测试卡",
+        )
+        other_refund = self._create_tx(
+            client,
+            other_headers,
+            transaction_time="2025-03-16 10:00:00",
+            direction="income",
+            amount=44,
+            source="wechat",
+            payment_method="隔离测试卡",
+        )
+
+        search_resp = client.post("/api/v1/special-data-processing/refunds/search", headers=auth_headers)
+        assert search_resp.status_code == 200
+        refund_ids = [item["refund_transaction"]["id"] for item in search_resp.json()["items"]]
+        assert other_refund["id"] not in refund_ids
+
+
 class TestClassificationRules:
     def test_rule_crud(self, client, auth_headers):
         create_resp = client.post("/api/v1/rules", headers=auth_headers, json={

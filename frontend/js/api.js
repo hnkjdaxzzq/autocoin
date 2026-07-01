@@ -187,6 +187,18 @@ const API = {
       return res.json();
     },
   },
+  specialDataProcessing: {
+    searchRefunds: () =>
+      apiFetch("/special-data-processing/refunds/search", {
+        method: "POST",
+      }),
+    confirmRefunds: (items) =>
+      apiFetch("/special-data-processing/refunds/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      }),
+  },
   imports: {
     upload: async (formData) => {
       const headers = {};

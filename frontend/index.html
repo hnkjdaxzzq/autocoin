@@ -38,10 +38,23 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         导入
       </a>
-      <a href="#/data-management" data-route="/data-management">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-        数据管理
-      </a>
+      <div class="nav-group" id="advanced-nav-group">
+        <button class="nav-group-toggle" id="advanced-nav-toggle" type="button">
+          <span class="nav-group-label">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12L4 7.5"/></svg>
+            高级功能
+          </span>
+          <svg class="nav-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-submenu">
+          <a href="#/special-data-processing" data-route="/special-data-processing">
+            特殊数据处理
+          </a>
+          <a href="#/data-management" data-route="/data-management">
+            数据管理
+          </a>
+        </div>
+      </div>
       <a href="#/ai-analysis" data-route="/ai-analysis">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a4 4 0 014 4c0 2-2 4-4 6-2-2-4-4-4-6a4 4 0 014-4z"/><path d="M5 22a7 7 0 0114 0"/></svg>
         AI分析
@@ -125,6 +138,7 @@
   <script src="/js/dashboard.js?v=23"></script>
   <script src="/js/transactions.js?v=22"></script>
   <script src="/js/broker-income-analysis.js?v=26"></script>
+  <script src="/js/special-data-processing.js?v=1"></script>
   <script src="/js/data-management.js?v=21"></script>
   <script src="/js/ai-classification.js?v=1"></script>
   <script src="/js/import.js?v=20"></script>

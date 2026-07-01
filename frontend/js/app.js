@@ -7,6 +7,7 @@ const ROUTES = {
   "/import":       Import,
   "/rules":        RulesPage,
   "/stats":        Stats,
+  "/special-data-processing": SpecialDataProcessing,
   "/data-management": DataManagement,
   "/ai-analysis": AiClassification,
 };
@@ -39,6 +40,7 @@ function navigate() {
   document.querySelectorAll("[data-route]").forEach(a => {
     a.classList.toggle("active", a.dataset.route === route);
   });
+  updateAdvancedNav(route);
 
   // Update username display
   const userEl = document.getElementById("user-display");
@@ -61,6 +63,26 @@ function navigate() {
 function logout() {
   Auth.clear();
   window.location.hash = "#/login";
+}
+
+/* ===== Advanced menu ===== */
+function initAdvancedNav() {
+  const group = document.getElementById("advanced-nav-group");
+  const toggle = document.getElementById("advanced-nav-toggle");
+  if (!group || !toggle) return;
+  toggle.addEventListener("click", () => {
+    group.classList.toggle("open");
+  });
+}
+
+function updateAdvancedNav(route) {
+  const group = document.getElementById("advanced-nav-group");
+  const toggle = document.getElementById("advanced-nav-toggle");
+  if (!group || !toggle) return;
+  const advancedRoutes = ["/special-data-processing", "/data-management"];
+  const isAdvancedRoute = advancedRoutes.includes(route);
+  group.classList.toggle("open", isAdvancedRoute || group.classList.contains("open"));
+  toggle.classList.toggle("active", isAdvancedRoute);
 }
 
 /* ===== Sidebar User Hover Menu ===== */
@@ -281,6 +303,7 @@ window.addEventListener("load", async () => {
   initTheme();
   initMePopup();
   initSidebarUserMenu();
+  initAdvancedNav();
   // Validate stored token on app start
   if (Auth.isLoggedIn()) {
     try {

@@ -38,6 +38,19 @@ def _table_specs() -> dict[str, list[str]]:
     }
 
 
+def _backup_specs_compatible(actual_specs: dict[str, list[str]], expected_specs: dict[str, list[str]]) -> bool:
+    if not isinstance(actual_specs, dict):
+        return False
+    normalized = {
+        table_name: list(columns)
+        for table_name, columns in actual_specs.items()
+    }
+    tx_columns = normalized.get("transactions")
+    if tx_columns is not None and "finishrefundcheck" not in tx_columns:
+        tx_columns.append("finishrefundcheck")
+    return normalized == expected_specs
+
+
 def _json_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat(sep=" ")
@@ -139,7 +152,7 @@ def _read_backup(file_bytes: bytes) -> dict[str, list[dict]]:
                     raise ValueError(ERROR_MESSAGE)
                 if data.get("version") != BACKUP_VERSION:
                     raise ValueError(ERROR_MESSAGE)
-                if data.get("tables") != expected_specs:
+                if not _backup_specs_compatible(data.get("tables"), expected_specs):
                     raise ValueError(ERROR_MESSAGE)
                 metadata_seen = True
                 continue
@@ -151,6 +164,8 @@ def _read_backup(file_bytes: bytes) -> dict[str, list[dict]]:
 
             table = tables[table_name]
             expected_columns = expected_specs[table_name]
+            if table_name == "transactions" and "finishrefundcheck" not in data:
+                data["finishrefundcheck"] = 0
             if set(data.keys()) != set(expected_columns):
                 raise ValueError(ERROR_MESSAGE)
 

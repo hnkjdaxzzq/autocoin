@@ -15,3 +15,5 @@ venv/
 *.swp
 *.swo
 node_modules/
+VibeCodeing/
+.agentdocs/

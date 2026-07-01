@@ -140,6 +140,76 @@ body {
 
 #sidebar a .icon { font-size: 16px; }
 
+.nav-group {
+  margin: 2px 10px;
+}
+
+.nav-group-toggle {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.55);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.nav-group-toggle:hover,
+.nav-group-toggle.active {
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.9);
+}
+
+.nav-group-toggle.active {
+  background: rgba(79,110,247,.15);
+  color: #fff;
+}
+
+.nav-group-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nav-group-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform .2s ease;
+}
+
+.nav-group.open .nav-group-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-submenu {
+  display: none;
+  padding: 2px 0 4px 28px;
+}
+
+.nav-group.open .nav-submenu {
+  display: block;
+}
+
+#sidebar .nav-submenu a {
+  margin: 2px 0;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+#sidebar .nav-submenu a.active::before {
+  left: -28px;
+}
+
 #app {
   margin-left: var(--sidebar-width);
   flex: 1;
@@ -2154,6 +2224,77 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 
 .modal-table tr:last-child td {
   border-bottom: none;
+}
+
+.refund-modal-dialog {
+  width: min(1100px, 94vw);
+}
+
+.refund-table-wrap {
+  max-height: 58vh;
+}
+
+.refund-result-table {
+  min-width: 860px;
+}
+
+.refund-result-table th:first-child,
+.refund-result-table td:first-child {
+  width: 90px;
+}
+
+.refund-result-table th,
+.refund-result-table td {
+  text-align: left;
+  vertical-align: top;
+}
+
+.refund-result-table th:first-child,
+.refund-result-table td:first-child {
+  text-align: center;
+}
+
+.refund-tx-summary {
+  display: grid;
+  gap: 4px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.refund-tx-summary div:last-child {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.refund-candidates-cell {
+  min-width: 360px;
+}
+
+.refund-candidate-option {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.refund-candidate-option:last-child {
+  margin-bottom: 0;
+}
+
+.refund-candidate-option:hover {
+  background: var(--table-hover-bg);
+}
+
+.refund-candidate-option input {
+  margin-top: 2px;
 }
 
 /* ===== Progress bar for AI classification ===== */

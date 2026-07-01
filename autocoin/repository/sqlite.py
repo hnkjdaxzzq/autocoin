@@ -35,6 +35,7 @@ def _tx_to_dict(tx: Transaction) -> dict:
         "remark": tx.remark,
         "import_batch_id": tx.import_batch_id,
         "is_deleted": tx.is_deleted,
+        "finishrefundcheck": tx.finishrefundcheck,
         "created_at": tx.created_at.isoformat() if tx.created_at else None,
         "updated_at": tx.updated_at.isoformat() if tx.updated_at else None,
     }
@@ -317,6 +318,7 @@ class SQLiteRepository(DataRepository):
             created_at=now,
             updated_at=now,
             is_deleted=0,
+            finishrefundcheck=0,
         )
         self._db.add(tx)
         self._db.commit()
@@ -452,6 +454,7 @@ class SQLiteRepository(DataRepository):
                 "created_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow(),
                 "is_deleted": 0,
+                "finishrefundcheck": 0,
             }
             rows.append(row)
 

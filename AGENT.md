@@ -7,7 +7,7 @@
 
 ## 一、项目概述
 
-**Autocoin** 是一款个人记账与统计分析 Web 应用，基于 **FastAPI（Python）后端 + 原生 JavaScript SPA 前端** 的单一仓库架构。支持支付宝/微信账单导入、**多券商收入分析**、**图片智能识别导入**（多模态 LLM）、**AI 自动分类**、**数据备份还原**等功能。支持多用户隔离、暗黑模式与移动端适配。
+**Autocoin** 是一款个人记账与统计分析 Web 应用，基于 **FastAPI（Python）后端 + 原生 JavaScript SPA 前端** 的单一仓库架构。支持支付宝/微信账单导入、**多券商收入分析**、**图片智能识别导入**（多模态 LLM）、**AI 自动分类**、**数据备份还原**、**特殊数据处理**等功能。支持多用户隔离、暗黑模式与移动端适配。
 
 - **后端：** Python 3.9+, FastAPI, SQLAlchemy 2.0 ORM, SQLite（WAL 模式）
 - **前端：** 原生 JS SPA（无框架）, Chart.js 图表, CSS 自定义属性暗黑模式
@@ -77,7 +77,8 @@ autocoin-t/
 │       ├── statistics.py            # 数据统计
 │       ├── broker_income_analysis.py # 券商收入分析（新增）
 │       ├── ai_classification.py     # AI 自动分类（新增）
-│       └── data_management.py       # 数据备份还原（新增）
+│       ├── data_management.py       # 数据备份还原（新增）
+│       └── special_data_processing.py # 特殊数据处理：退款候选匹配与确认
 │
 ├── frontend/                        # 前端静态文件（原生 JS SPA）
 │   ├── index.html                   # SPA 外壳（侧边栏、顶部栏、移动端底部栏）
@@ -94,6 +95,7 @@ autocoin-t/
 │       ├── stats.js                 # 统计页（年度/月度/分类/钻取）
 │       ├── broker-income-analysis.js # 券商收入分析页（新增）
 │       ├── data-management.js       # 数据管理页（备份/还原，新增）
+│       ├── special-data-processing.js # 特殊数据处理页：退款数据处理
 │       └── ai-classification.js     # AI 自动分类页（新增）
 │
 ├── tests/                           # pytest 自动化测试
@@ -173,6 +175,7 @@ autocoin-t/
 | created_at | DateTime | NOT NULL | 创建时间 |
 | updated_at | DateTime | NOT NULL | 更新时间 |
 | is_deleted | Integer | NOT NULL, default=0 | 软删除标志 |
+| finishrefundcheck | Integer | NOT NULL, default=0, indexed | 退款检测确认标记（0/NULL 未确认，1 已确认） |
 
 > **唯一约束：** `(user_id, source, source_order_id)` — 防止同一来源的相同订单重复导入。
 
@@ -339,6 +342,13 @@ autocoin-t/
 | POST | `/data-management/backup/validate` | 验证备份文件格式 |
 | POST | `/data-management/backup/restore` | 还原备份数据 |
 
+### 5.9 特殊数据处理 `/special-data-processing`（新增）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/special-data-processing/refunds/search` | 查询当前用户未确认的疑似退款数据，并返回匹配支出候选 |
+| POST | `/special-data-processing/refunds/confirm` | 确认退款处理结果，标记疑似退款和被选中的支出候选 |
+
 ---
 
 ## 六、关键实现细节
@@ -402,6 +412,7 @@ autocoin-t/
 | `#/import` | 导入 | 文件导入 + 图片导入 + 券商导入快捷键 |
 | `#/rules` | 规则 | 分类规则 + 别名规则双标签，带差异对比对话框 |
 | `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细 |
+| `#/special-data-processing` | 特殊数据处理 | 退款数据处理，支持一条疑似退款对应多条支出候选 |
 | `#/data-management` | 数据管理 | 全量备份导出/导入还原/交易管理 |
 | `#/ai-analysis` | AI 分析 | AI 自动分类（SSE 进度 + 预览确认） |
 
