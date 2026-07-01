@@ -1163,6 +1163,41 @@ class TestClassificationRules:
         items = list_resp.json()["items"]
         assert any(item["category"] == "咖啡饮品" for item in items)
 
+    def test_reclassify_does_not_duplicate_original_category_remark(self, client, auth_headers):
+        rule_resp = client.post("/api/v1/rules", headers=auth_headers, json={
+            "name": "便利店归类日用",
+            "priority": 40,
+            "is_active": True,
+            "match_counterparty": "便利店",
+            "match_product": "",
+            "match_payment_method": "",
+            "match_transaction_type": "",
+            "category": "日用百货",
+            "remark": "",
+        })
+        assert rule_resp.status_code == 201
+
+        tx_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-03-03 09:00:00",
+            "direction": "expense",
+            "amount": 12.0,
+            "category": "餐饮美食",
+            "counterparty": "便利店",
+            "product": "矿泉水",
+            "payment_method": "支付宝",
+            "remark": "手动备注；原数据分类为：餐饮美食",
+        })
+        assert tx_resp.status_code == 201
+        tx = tx_resp.json()
+
+        reclassify_resp = client.post("/api/v1/rules/reclassify", headers=auth_headers)
+        assert reclassify_resp.status_code == 200
+
+        updated = client.get(f"/api/v1/transactions/{tx['id']}", headers=auth_headers).json()
+        assert updated["category"] == "日用百货"
+        assert updated["remark"] == "手动备注；原数据分类为：餐饮美食"
+        assert updated["remark"].count("原数据分类为：") == 1
+
 class TestFileImportPreview:
     def test_preview_and_confirm_file_import(self, client, auth_headers):
         existing_csv = _make_alipay_csv([

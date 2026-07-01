@@ -161,6 +161,7 @@ class SQLiteRepository(DataRepository):
                 continue
             # 保存原始分类
             orig_category = normalized.get("category")
+            existing_remark = (normalized.get("remark") or "").strip()
             # 无条件应用规则分类（如果规则提供了分类）
             if rule.category:
                 normalized["category"] = rule.category
@@ -169,11 +170,15 @@ class SQLiteRepository(DataRepository):
             if rule.remark:
                 remark_parts.append(rule.remark)
             else:
-                existing_remark = (normalized.get("remark") or "").strip()
                 if existing_remark:
                     remark_parts.append(existing_remark)
             # 如果分类被覆盖且原分类非空，添加追溯信息
-            if rule.category and orig_category and orig_category != rule.category:
+            if (
+                rule.category
+                and orig_category
+                and orig_category != rule.category
+                and "原数据分类为：" not in existing_remark
+            ):
                 remark_parts.append(f"原数据分类为：{orig_category}")
             if remark_parts:
                 normalized["remark"] = "；".join(remark_parts)
