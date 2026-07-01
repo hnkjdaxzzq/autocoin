@@ -22,6 +22,7 @@ router = APIRouter(prefix="/ai-classification", tags=["ai-classification"])
 BATCH_SIZE = 50
 MAX_WORKERS = 5
 MAX_RETRIES = 3
+MAX_SPLIT_RETRIES = 3
 RETRY_DELAY = 2
 DEEPSEEK_MAX_TOKENS = 8192
 PREF_KEY_AI_CLASSIFICATION = "ai_classification.preferences"
@@ -95,12 +96,16 @@ class AIClassificationBatchError(Exception):
         raw_response: str = "",
         response_debug: str = "",
         request_debug: str = "",
+        splittable: bool = False,
+        split_depth: int = 0,
     ):
         super().__init__(message)
         self.prompt = prompt
         self.raw_response = raw_response
         self.response_debug = response_debug
         self.request_debug = request_debug
+        self.splittable = splittable
+        self.split_depth = split_depth
 
 
 def get_repo(
@@ -289,6 +294,26 @@ def _response_debug_preview(response) -> str:
     return _debug_preview(json.dumps(payload, ensure_ascii=False, default=str, indent=2))
 
 
+def _response_finished_by_length(response) -> bool:
+    for choice in getattr(response, "choices", []) or []:
+        if getattr(choice, "finish_reason", None) == "length":
+            return True
+    return False
+
+
+def _looks_like_incomplete_json(content: str) -> bool:
+    text = (content or "").strip()
+    if not text:
+        return False
+    return (
+        text.startswith("{")
+        and not text.endswith("}")
+    ) or (
+        text.startswith("[")
+        and not text.endswith("]")
+    )
+
+
 def _request_debug_preview(prompt: str, transactions: list[dict], categories: list[str]) -> str:
     payload = {
         "base_url": "https://api.deepseek.com",
@@ -366,12 +391,14 @@ def _classify_batch(
             try:
                 parsed = json.loads(content)
             except json.JSONDecodeError as e:
+                splittable = _response_finished_by_length(response) or _looks_like_incomplete_json(content)
                 raise AIClassificationBatchError(
                     f"AI returned non-JSON content: {_content_preview(content)}",
                     prompt=prompt if debug else "",
                     raw_response=content if debug else "",
                     response_debug=response_debug,
                     request_debug=request_debug,
+                    splittable=splittable,
                 ) from e
 
             transactions_result = _find_transactions_result(parsed)
@@ -455,6 +482,52 @@ def _classify_batch(
     return []
 
 
+def _classify_batch_with_split(
+    api_key: str,
+    transactions: list[dict],
+    categories: list[str],
+    prompt_template: str,
+    debug: bool = False,
+    split_depth: int = 0,
+) -> list[dict]:
+    try:
+        return _classify_batch(api_key, transactions, categories, prompt_template, debug)
+    except AIClassificationBatchError as e:
+        can_split = (
+            e.splittable
+            and len(transactions) > 1
+            and split_depth < MAX_SPLIT_RETRIES
+        )
+        if not can_split:
+            e.split_depth = split_depth
+            raise
+
+        mid = max(1, len(transactions) // 2)
+        left = transactions[:mid]
+        right = transactions[mid:]
+        logger.warning(
+            "Splitting AI classification batch of %d transactions at depth %d after splittable error: %s",
+            len(transactions), split_depth + 1, e,
+        )
+        left_results = _classify_batch_with_split(
+            api_key,
+            left,
+            categories,
+            prompt_template,
+            debug,
+            split_depth + 1,
+        )
+        right_results = _classify_batch_with_split(
+            api_key,
+            right,
+            categories,
+            prompt_template,
+            debug,
+            split_depth + 1,
+        )
+        return left_results + right_results
+
+
 def _sse_event(event: str, data: object) -> str:
     """Format an SSE event string."""
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -520,7 +593,7 @@ def _classify_stream(
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_map = {
             executor.submit(
-                _classify_batch,
+                _classify_batch_with_split,
                 api_key,
                 batch,
                 categories,
@@ -544,6 +617,7 @@ def _classify_stream(
                         "total_batches": total_batches,
                         "count": len(failed_batch),
                         "reason": _summarize_error(e),
+                        "split_depth": getattr(e, "split_depth", 0),
                         "prompt_preview": _debug_preview(getattr(e, "prompt", "")) if debug else "",
                         "request_debug_preview": _debug_preview(getattr(e, "request_debug", "")) if debug else "",
                         "raw_response_preview": _debug_preview(getattr(e, "raw_response", "")) if debug else "",

@@ -653,6 +653,8 @@ const AiClassification = {
       const batch = item.batch || "?";
       const totalB = item.total_batches || totalBatches || "?";
       const count = item.count || 0;
+      const splitDepth = item.split_depth || 0;
+      const splitText = splitDepth > 0 ? `，已自动拆批 ${splitDepth} 层` : "";
       const reason = AiClassification._escapeHtml(item.reason || "未知错误");
       const prompt = item.prompt_preview ? `
         <details style="margin-top:4px">
@@ -678,7 +680,7 @@ const AiClassification = {
           <pre style="white-space:pre-wrap;overflow:auto;max-height:220px;margin:6px 0 0;padding:8px;
                       border-radius:var(--radius-sm);background:rgba(0,0,0,.06);color:var(--text)">${AiClassification._escapeHtml(item.response_debug_preview)}</pre>
         </details>` : "";
-      return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条）：${reason}${prompt}${requestDebug}${raw}${responseDebug}</div>`;
+      return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条${splitText}）：${reason}${prompt}${requestDebug}${raw}${responseDebug}</div>`;
     }).join("");
     return `
       <div style="margin-top:6px">
@@ -733,6 +735,7 @@ const AiClassification = {
       lines.push(`===== 失败 ${idx + 1}/${details.length} =====`);
       lines.push(`批次: ${item.batch || "?"}/${item.total_batches || totalBatches || "?"}`);
       lines.push(`条数: ${item.count || 0}`);
+      lines.push(`自动拆批层数: ${item.split_depth || 0}`);
       lines.push(`原因: ${item.reason || "未知错误"}`);
       lines.push("");
       lines.push("----- 本批 Prompt -----");

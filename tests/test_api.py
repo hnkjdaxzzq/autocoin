@@ -6,14 +6,18 @@ to a temp directory BEFORE any autocoin modules are imported.
 import pytest
 from fastapi.testclient import TestClient
 
+import autocoin.routers.ai_classification as ai_classification_router
 from autocoin.routers.ai_classification import (
     DEFAULT_CATEGORIES,
     DEFAULT_PROMPT_TEMPLATE,
+    AIClassificationBatchError,
     _filter_classifiable_transactions,
+    _classify_batch_with_split,
     _normalize_ai_result_item,
     _parse_categories,
     _request_debug_preview,
     _response_debug_preview,
+    _response_finished_by_length,
     _render_prompt_template,
     _summarize_error,
 )
@@ -357,6 +361,15 @@ class TestAIClassificationPreferences:
         assert '"content_length": 0' in preview
         assert '"prompt_tokens": 12' in preview
 
+    def test_response_finished_by_length_detects_length_reason(self):
+        class Choice:
+            finish_reason = "length"
+
+        class Response:
+            choices = [Choice()]
+
+        assert _response_finished_by_length(Response()) is True
+
     def test_request_debug_preview_includes_batch_request_data(self):
         preview = _request_debug_preview(
             "请分类\n1|餐饮|商户|商品",
@@ -375,6 +388,39 @@ class TestAIClassificationPreferences:
         assert '"batch_transaction_ids": [' in preview
         assert "1|餐饮|商户 A|商品 B" in preview
         assert "api_key" not in preview
+
+    def test_classify_batch_with_split_retries_splittable_error(self, monkeypatch):
+        calls = []
+
+        def fake_classify_batch(api_key, transactions, categories, prompt_template, debug=False):
+            calls.append([tx["id"] for tx in transactions])
+            if len(transactions) > 2:
+                raise AIClassificationBatchError("truncated", splittable=True)
+            return [
+                {
+                    "id": tx["id"],
+                    "old_category": tx.get("category") or "",
+                    "new_category": "餐饮",
+                    "counterparty": tx.get("counterparty") or "",
+                    "product": tx.get("product") or "",
+                    "transaction_time": tx.get("transaction_time") or "",
+                }
+                for tx in transactions
+            ]
+
+        monkeypatch.setattr(ai_classification_router, "_classify_batch", fake_classify_batch)
+        transactions = [{"id": idx, "category": ""} for idx in range(1, 5)]
+
+        results = _classify_batch_with_split(
+            "sk-test",
+            transactions,
+            ["餐饮"],
+            "{transactions}",
+            debug=True,
+        )
+
+        assert calls == [[1, 2, 3, 4], [1, 2], [3, 4]]
+        assert [item["id"] for item in results] == [1, 2, 3, 4]
 
 
 class TestTransactions:
