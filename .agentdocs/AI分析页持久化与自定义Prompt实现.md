@@ -2,7 +2,7 @@
 
 ## 背景
 
-AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列表和 DeepSeek API key，Prompt 由后端硬编码生成。现在改为将分类列表、API key、AI Prompt 三项保存到当前登录用户的持久化配置表，并允许用户编辑 Prompt 模板。
+AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列表和 DeepSeek API key，Prompt 由后端硬编码生成。现在改为将分类列表、API key、AI Prompt 和支出筛选开关保存到当前登录用户的持久化配置表，并允许用户编辑 Prompt 模板。
 
 ## 持久化配置
 
@@ -13,36 +13,43 @@ AI 分析页的 AI 自动分类功能原先只在页面内临时使用分类列�
   - `categories`：页面“使用AI将数据做以下分类”的输入值
   - `api_key`：页面 DeepSeek API key 输入值
   - `prompt_template`：页面 AI Prompt 文本框内容
+  - `only_expense`：是否仅分类支出数据，默认 `true`
 - 注意：API key 当前按需求以明文 JSON 文本保存到用户偏好表中。
 
 ## 后端接口
 
 - `GET /api/v1/ai-classification/preferences`
-  - 返回当前用户保存的三项配置。
-  - 如果用户没有保存过配置，返回空分类、空 API key、默认 Prompt 模板。
+  - 返回当前用户保存的配置。
+  - 如果用户没有保存过配置，返回空分类、空 API key、默认 Prompt 模板、默认仅分类支出数据。
+  - 响应额外包含 `default_prompt_template`，供前端“重置为默认Prompt”使用。
 - `PUT /api/v1/ai-classification/preferences`
   - 保存当前用户的三项配置。
 - `POST /api/v1/ai-classification/classify`
-  - 请求体包含 `api_key`、`categories`、`prompt_template`。
-  - 执行前先保存这三项配置，然后通过 SSE 流式返回分类进度和结果。
+  - 请求体包含 `api_key`、`categories`、`prompt_template`、`only_expense`。
+  - 执行前先保存这些配置，然后通过 SSE 流式返回分类进度和结果。
 
 ## Prompt 模板规则
 
-默认 Prompt 模板是中文完整提示词，也是后端执行时发送给 DeepSeek 的真实用户消息模板。模板内使用两个变量占位：
+默认 Prompt 模板是中文完整提示词，也是后端执行时发送给 DeepSeek 的真实用户消息模板。它保留完整分类规则和示例，仅将接口协议部分做 token 压缩：分类使用编号，交易使用管道分隔行，返回结果使用紧凑数组。
 
-- `{categories}`：执行时替换为用户填写并解析后的分类列表，例如 `餐饮, 交通`。
-- `{transactions}`：执行时替换为当前批次交易数据，每行包含 `id`、`current_category`、`counterparty`、`product`，不包含备注。
+- `{category_map}`：执行时替换为分类编号映射，例如 `1=餐饮`。
+- `{transactions}`：执行时替换为当前批次交易数据，每行格式为 `id|当前分类|交易对方|商品说明`，不包含备注。
+- `{categories}`：保留兼容变量，替换为逗号分隔分类列表。
+
+默认要求 DeepSeek 返回紧凑 JSON：`{"t":[[id,分类编号]]}`。后端会把分类编号映射回分类名称，同时兼容旧格式 `transactions`、`results`、`data`、`classifications` 以及 `{"id": 1, "category": "餐饮"}`。
 
 执行分类时，后端只按用户保存或本次提交的模板做变量替换，不再额外拼接旧版硬编码 Prompt。如果用户删除变量，后端也不会强行补回。
 
-交易方向为“不计”的数据不参与 AI 自动分类。当前数据库内主要存储值为 `neutral`，后端同时兼容过滤 `neutral`、`不计`、`不计收支`。
+默认只处理交易方向为支出的数据。若用户取消勾选“仅分类支出数据”，则处理所有非“不计”数据；当前数据库内“不计”主要存储值为 `neutral`，后端同时兼容过滤 `neutral`、`不计`、`不计收支`。
 
 ## 前端交互
 
-- 页面加载后调用偏好接口，回填分类列表、API key 和 AI Prompt。
-- AI Prompt 位于 AI 自动分类模块底部，默认折叠。
+- 页面加载后调用偏好接口，回填分类列表、API key、AI Prompt 和“仅分类支出数据”复选框。
+- “仅分类支出数据”复选框位于分类按钮上方，默认勾选。
+- AI Prompt 位于 AI 自动分类模块底部，默认展开。
 - 点击 `AI Prompt` 标题可展开或折叠文本框。
-- 点击“AI自动分类”时提交当前三项配置，并由后端保存后执行。
+- AI Prompt 文本框下方有“重置为默认Prompt”按钮，点击后将文本框内容恢复为后端返回的 `default_prompt_template`。
+- 点击“AI自动分类”时提交当前配置，并由后端保存后执行。
 
 ## 后续修改注意
 

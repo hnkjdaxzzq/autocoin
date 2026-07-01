@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from autocoin.routers.ai_classification import (
     DEFAULT_PROMPT_TEMPLATE,
     _filter_classifiable_transactions,
+    _normalize_ai_result_item,
     _render_prompt_template,
 )
 from autocoin.app import create_app
@@ -179,6 +180,8 @@ class TestAIClassificationPreferences:
         assert data["categories"] == ""
         assert data["api_key"] == ""
         assert data["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+        assert data["only_expense"] is True
+        assert data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
 
     def test_update_preferences_is_user_scoped(self, client):
         headers = self._register_headers(client, "aiprefsowner")
@@ -187,6 +190,7 @@ class TestAIClassificationPreferences:
             "categories": "餐饮,交通",
             "api_key": "sk-owner",
             "prompt_template": "分类: {categories}\n交易: {transactions}",
+            "only_expense": False,
         }
 
         resp = client.put(
@@ -195,15 +199,23 @@ class TestAIClassificationPreferences:
             json=payload,
         )
         assert resp.status_code == 200
-        assert resp.json() == payload
+        data = resp.json()
+        for key, value in payload.items():
+            assert data[key] == value
+        assert data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
 
         owner_resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
         other_resp = client.get("/api/v1/ai-classification/preferences", headers=other_headers)
 
-        assert owner_resp.json() == payload
+        owner_data = owner_resp.json()
+        for key, value in payload.items():
+            assert owner_data[key] == value
+        assert owner_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
         assert other_resp.json()["categories"] == ""
         assert other_resp.json()["api_key"] == ""
         assert other_resp.json()["prompt_template"] == DEFAULT_PROMPT_TEMPLATE
+        assert other_resp.json()["only_expense"] is True
+        assert other_resp.json()["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
 
     def test_classify_accepts_prompt_template_and_saves_preferences(self, client):
         headers = self._register_headers(client, "aiprefsclassify")
@@ -211,6 +223,7 @@ class TestAIClassificationPreferences:
             "categories": "餐饮,交通",
             "api_key": "sk-classify",
             "prompt_template": "只返回 JSON。分类: {categories}\n交易:\n{transactions}",
+            "only_expense": False,
         }
 
         resp = client.post(
@@ -223,31 +236,35 @@ class TestAIClassificationPreferences:
         assert '"total": 0' in resp.text
         prefs_resp = client.get("/api/v1/ai-classification/preferences", headers=headers)
         assert prefs_resp.status_code == 200
-        assert prefs_resp.json() == payload
+        prefs_data = prefs_resp.json()
+        for key, value in payload.items():
+            assert prefs_data[key] == value
+        assert prefs_data["default_prompt_template"] == DEFAULT_PROMPT_TEMPLATE
 
     def test_render_prompt_template_replaces_variables(self):
         prompt = _render_prompt_template(
-            "分类={categories}\n数据={transactions}",
+            "分类编号:\n{category_map}\n分类={categories}\n数据={transactions}",
             [{
                 "id": 7,
                 "category": "旧分类",
                 "counterparty": "商户",
-                "product": "商品",
+                "product": "商品|换行\n清理",
                 "remark": "备注",
             }],
             ["餐饮", "交通"],
         )
 
+        assert "1=餐饮" in prompt
+        assert "2=交通" in prompt
         assert "分类=餐饮, 交通" in prompt
-        assert 'id=7, current_category="旧分类"' in prompt
-        assert 'counterparty="商户"' in prompt
-        assert 'product="商品"' in prompt
+        assert "7|旧分类|商户|商品 换行 清理" in prompt
         assert "备注" not in prompt
         assert "remark" not in prompt
         assert "{categories}" not in prompt
+        assert "{category_map}" not in prompt
         assert "{transactions}" not in prompt
 
-    def test_filter_classifiable_transactions_excludes_neutral_direction(self):
+    def test_filter_classifiable_transactions_defaults_to_expense_only(self):
         transactions = [
             {"id": 1, "direction": "expense"},
             {"id": 2, "direction": "income"},
@@ -258,7 +275,27 @@ class TestAIClassificationPreferences:
 
         filtered = _filter_classifiable_transactions(transactions)
 
+        assert [tx["id"] for tx in filtered] == [1]
+
+    def test_filter_classifiable_transactions_can_include_non_neutral(self):
+        transactions = [
+            {"id": 1, "direction": "expense"},
+            {"id": 2, "direction": "income"},
+            {"id": 3, "direction": "neutral"},
+            {"id": 4, "direction": "不计"},
+            {"id": 5, "direction": "不计收支"},
+        ]
+
+        filtered = _filter_classifiable_transactions(transactions, only_expense=False)
+
         assert [tx["id"] for tx in filtered] == [1, 2]
+
+    def test_normalize_ai_result_item_accepts_compact_category_id(self):
+        category_map = {1: "餐饮", 2: "交通"}
+
+        assert _normalize_ai_result_item([7, 2], category_map) == (7, "交通")
+        assert _normalize_ai_result_item({"id": 8, "category_id": "1"}, category_map) == (8, "餐饮")
+        assert _normalize_ai_result_item({"id": 9, "category": "购物"}, category_map) == (9, "购物")
 
 
 class TestTransactions:

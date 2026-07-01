@@ -23,31 +23,32 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2
 PREF_KEY_AI_CLASSIFICATION = "ai_classification.preferences"
 
-DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用户指定的全部可用分类只有：[{categories}]。
+DEFAULT_PROMPT_TEMPLATE = """你是一个严格的记账交易分类助手。用户指定的全部可用分类如下，左侧是分类编号，右侧是分类名称：
 
-你的任务：把每一条交易都归类到上述分类列表中的某一个分类。你必须严格只使用列表中的原始分类名称，不允许输出列表外的分类，不允许输出同义词、近义词、变体或额外解释。
+分类编号：
+{category_map}
+
+你的任务：把每一条交易都归类到上述分类编号中的某一个编号。你必须严格只使用列表中的编号，不允许输出列表外的编号、分类名称、同义词、近义词、变体或额外解释。
 
 重要规则：
-- 如果交易当前分类和用户分类列表中的某一项接近但不完全一致，请映射到列表中最接近的一项。
-- 示例：用户分类 = [餐饮,交通]，current_category = "餐饮美食" → 必须输出 "餐饮"
-- 示例：用户分类 = [餐饮,交通]，current_category = "打车" → 必须输出 "交通"
-- 示例：用户分类 = [购物,交通]，current_category = "餐饮" → 必须选择最接近的一项，例如 "购物"
-- 永远不要输出用户分类列表之外的任何分类。
-- 每一条交易都必须给出一个分类，不能跳过。
+- 如果交易当前分类和某个用户分类接近但不完全一致，请映射到最接近的分类编号。
+- 示例：分类包含 1=餐饮，2=交通，current_category = "餐饮美食" → 必须输出编号 1。
+- 示例：分类包含 1=餐饮，2=交通，current_category = "打车" → 必须输出编号 2。
+- 示例：分类包含 1=购物，2=交通，current_category = "餐饮" → 必须选择最接近的一项，例如编号 1。
+- 永远不要输出分类编号列表之外的任何编号。
+- 每一条交易都必须给出一个分类编号，不能跳过。
 
-请为每一条交易返回一个 JSON 对象，根字段必须是 "transactions"，其值是数组。数组中每个对象必须包含：
-- "id"：整数，原交易 id
-- "category"：字符串，必须是 [{categories}] 中的某一个原始分类名称
-
-待分类交易如下，每行都包含当前分类、交易对方和商品说明供参考：
+待分类交易如下，每行格式为：id|当前分类|交易对方|商品说明
 {transactions}
 
-只返回合法 JSON 对象，不要返回 Markdown，不要返回代码块，不要返回任何额外文字。"""
+请只返回合法 JSON 对象，格式必须为：{"t":[[id,分类编号]]}
+不要返回 Markdown，不要返回代码块，不要返回任何额外文字。"""
 
 DEFAULT_AI_CLASSIFICATION_PREFERENCES = {
     "categories": "",
     "api_key": "",
     "prompt_template": DEFAULT_PROMPT_TEMPLATE,
+    "only_expense": True,
 }
 
 
@@ -55,6 +56,7 @@ class ClassifyRequest(BaseModel):
     api_key: str
     categories: str  # comma-separated, e.g. "美食,交通,旅游"
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
+    only_expense: bool = True
 
 
 class ClassifyResponse(BaseModel):
@@ -67,6 +69,8 @@ class AIClassificationPreferences(BaseModel):
     categories: str = ""
     api_key: str = ""
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
+    only_expense: bool = True
+    default_prompt_template: str = DEFAULT_PROMPT_TEMPLATE
 
 
 class ConfirmRequest(BaseModel):
@@ -92,6 +96,8 @@ def _normalize_preferences(value) -> AIClassificationPreferences:
         categories=value.get("categories") or "",
         api_key=value.get("api_key") or "",
         prompt_template=value.get("prompt_template") or DEFAULT_PROMPT_TEMPLATE,
+        only_expense=value.get("only_expense", True) is not False,
+        default_prompt_template=DEFAULT_PROMPT_TEMPLATE,
     )
 
 
@@ -100,24 +106,46 @@ def _preference_payload(body: AIClassificationPreferences) -> dict:
         "categories": body.categories,
         "api_key": body.api_key,
         "prompt_template": body.prompt_template or DEFAULT_PROMPT_TEMPLATE,
+        "only_expense": body.only_expense,
     }
+
+
+def _build_category_map(categories: list[str]) -> dict[int, str]:
+    return {i + 1: category for i, category in enumerate(categories)}
+
+
+def _build_category_map_prompt(categories: list[str]) -> str:
+    return "\n".join(
+        f"{idx}={category}"
+        for idx, category in _build_category_map(categories).items()
+    )
+
+
+def _clean_prompt_field(value) -> str:
+    return str(value or "").replace("|", " ").replace("\n", " ").strip()
 
 
 def _build_transaction_prompt_lines(transactions: list[dict]) -> str:
     lines = []
     for tx in transactions:
-        counterparty = tx.get("counterparty") or ""
-        product = tx.get("product") or ""
-        old_cat = tx.get("category") or ""
-        lines.append(
-            f'id={tx["id"]}, current_category="{old_cat}", counterparty="{counterparty}", product="{product}"'
-        )
+        old_cat = _clean_prompt_field(tx.get("category"))
+        counterparty = _clean_prompt_field(tx.get("counterparty"))
+        product = _clean_prompt_field(tx.get("product"))
+        lines.append(f'{tx["id"]}|{old_cat}|{counterparty}|{product}')
     return "\n".join(lines)
 
 
-def _filter_classifiable_transactions(transactions: list[dict]) -> list[dict]:
+def _filter_classifiable_transactions(
+    transactions: list[dict],
+    only_expense: bool = True,
+) -> list[dict]:
     """Exclude transactions that should not participate in AI classification."""
     neutral_values = {"neutral", "不计", "不计收支"}
+    if only_expense:
+        return [
+            tx for tx in transactions
+            if (tx.get("direction") or "").strip() == "expense"
+        ]
     return [
         tx for tx in transactions
         if (tx.get("direction") or "").strip() not in neutral_values
@@ -134,8 +162,48 @@ def _render_prompt_template(
     return (
         template
         .replace("{categories}", ", ".join(categories))
+        .replace("{category_map}", _build_category_map_prompt(categories))
         .replace("{transactions}", _build_transaction_prompt_lines(transactions))
     )
+
+
+def _find_transactions_result(parsed):
+    if isinstance(parsed, dict):
+        for key in ("t", "transactions", "results", "data", "classifications"):
+            if key in parsed and isinstance(parsed[key], list):
+                return parsed[key]
+    if isinstance(parsed, list):
+        return parsed
+    return None
+
+
+def _normalize_ai_result_item(item, category_map: dict[int, str]) -> tuple:
+    if isinstance(item, (list, tuple)) and len(item) >= 2:
+        tid = item[0]
+        category_value = item[1]
+    elif isinstance(item, dict):
+        tid = item.get("id")
+        category_value = item.get("category")
+        if category_value is None:
+            category_value = item.get("category_id")
+        if category_value is None:
+            category_value = item.get("c")
+    else:
+        return None, ""
+
+    try:
+        tid = int(tid)
+    except (TypeError, ValueError):
+        return None, ""
+
+    if isinstance(category_value, int):
+        return tid, category_map.get(category_value, "")
+    if isinstance(category_value, str):
+        cat = category_value.strip()
+        if cat.isdigit():
+            return tid, category_map.get(int(cat), "")
+        return tid, cat
+    return None, ""
 
 
 @router.get("/preferences", response_model=AIClassificationPreferences)
@@ -165,6 +233,7 @@ def _classify_batch(
 ) -> list[dict]:
     """Send one batch of transactions to DeepSeek for classification."""
     prompt = _render_prompt_template(prompt_template, transactions, categories)
+    category_map = _build_category_map(categories)
 
     for attempt in range(MAX_RETRIES):
         try:
@@ -190,15 +259,7 @@ def _classify_batch(
             content = response.choices[0].message.content.strip()
             parsed = json.loads(content)
 
-            # Handle various response shapes
-            transactions_result = None
-            if isinstance(parsed, dict):
-                for key in ("transactions", "results", "data", "classifications"):
-                    if key in parsed and isinstance(parsed[key], list):
-                        transactions_result = parsed[key]
-                        break
-            if isinstance(parsed, list):
-                transactions_result = parsed
+            transactions_result = _find_transactions_result(parsed)
 
             if transactions_result is None:
                 logger.warning("Could not find transaction list in response: %s", content[:300])
@@ -208,8 +269,7 @@ def _classify_batch(
             tx_map = {tx["id"]: tx for tx in transactions}
             validated = []
             for item in transactions_result:
-                tid = item.get("id")
-                cat = item.get("category", "").strip()
+                tid, cat = _normalize_ai_result_item(item, category_map)
                 if tid and cat and tid in tx_map:
                     validated.append({
                         "id": tid,
@@ -256,6 +316,7 @@ def _classify_stream(
     api_key: str,
     categories: list[str],
     prompt_template: str,
+    only_expense: bool,
     repo: SQLiteRepository,
 ):
     """Generator that yields SSE progress events and a final complete event."""
@@ -266,7 +327,7 @@ def _classify_stream(
     })
 
     all_tx, _ = repo.list_transactions(page=1, page_size=1000000)
-    all_tx = _filter_classifiable_transactions(all_tx)
+    all_tx = _filter_classifiable_transactions(all_tx, only_expense=only_expense)
     total = len(all_tx)
     if not all_tx:
         yield _sse_event("complete", {
@@ -382,10 +443,17 @@ def classify_transactions(
         "categories": body.categories,
         "api_key": body.api_key,
         "prompt_template": prompt_template,
+        "only_expense": body.only_expense,
     })
 
     return StreamingResponse(
-        _classify_stream(body.api_key, categories, prompt_template, repo),
+        _classify_stream(
+            body.api_key,
+            categories,
+            prompt_template,
+            body.only_expense,
+            repo,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

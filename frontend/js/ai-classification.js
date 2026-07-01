@@ -5,11 +5,12 @@ const AiClassification = {
     previewPageSize: 50,
     allResults: [],
     filteredResults: [],
-    promptExpanded: false,
+    promptExpanded: true,
+    defaultPromptTemplate: "",
   },
 
   render(container) {
-    AiClassification._state.promptExpanded = false;
+    AiClassification._state.promptExpanded = true;
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">AI分析</h1>
@@ -30,6 +31,12 @@ const AiClassification = {
             请填写希望将数据分类的[全部]类型，不同分类之间用英文或中文逗号隔开，AI将把所有数据识别为以上分类，不保留你没有填写的类型。
           </div>
         </div>
+
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:14px;color:var(--text);cursor:pointer">
+          <input type="checkbox" id="ai-only-expense" checked
+            style="width:16px;height:16px;accent-color:var(--primary)">
+          <span>仅分类支出数据</span>
+        </label>
 
         <button id="btn-ai-classify" class="btn btn-primary" style="width:100%;padding:10px;font-size:15px;font-weight:600">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -55,20 +62,24 @@ const AiClassification = {
         </div>
 
         <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
-          <button id="ai-prompt-toggle" type="button" aria-expanded="false"
+          <button id="ai-prompt-toggle" type="button" aria-expanded="true"
             style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0;
                    border:0;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer">
             <span>AI Prompt</span>
-            <span id="ai-prompt-toggle-icon" style="font-size:16px;color:var(--text-muted)">▸</span>
+            <span id="ai-prompt-toggle-icon" style="font-size:16px;color:var(--text-muted)">▾</span>
           </button>
-          <div id="ai-prompt-panel" style="display:none;margin-top:10px">
+          <div id="ai-prompt-panel" style="display:block;margin-top:10px">
             <textarea id="ai-prompt-template" class="ai-input" rows="16"
               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
                      font-size:13px;background:var(--input-bg);color:var(--text);
                      font-family:monospace;line-height:1.5;resize:vertical"></textarea>
             <div style="margin-top:4px;font-size:12px;color:var(--text-muted)">
-              可使用 {categories} 表示分类列表，{transactions} 表示本批交易数据。
+              可使用 {category_map} 表示分类编号，{transactions} 表示本批交易数据；仍兼容 {categories}。
             </div>
+            <button id="btn-reset-ai-prompt" type="button" class="btn btn-ghost"
+              style="margin-top:8px;padding:8px 10px;font-size:13px">
+              重置为默认Prompt
+            </button>
           </div>
         </div>
       </div>
@@ -99,6 +110,14 @@ const AiClassification = {
         !AiClassification._state.promptExpanded,
       );
     });
+
+    container.querySelector("#btn-reset-ai-prompt").addEventListener("click", () => {
+      const promptEl = container.querySelector("#ai-prompt-template");
+      if (promptEl) {
+        promptEl.value = AiClassification._state.defaultPromptTemplate || "";
+        AiClassification._showToast("已重置为默认 Prompt");
+      }
+    });
   },
 
   async _loadPreferences(container) {
@@ -107,9 +126,12 @@ const AiClassification = {
       const categoriesEl = container.querySelector("#ai-categories");
       const apiKeyEl = container.querySelector("#ai-api-key");
       const promptEl = container.querySelector("#ai-prompt-template");
+      const onlyExpenseEl = container.querySelector("#ai-only-expense");
+      AiClassification._state.defaultPromptTemplate = prefs.default_prompt_template || "";
       if (categoriesEl) categoriesEl.value = prefs.categories || "";
       if (apiKeyEl) apiKeyEl.value = prefs.api_key || "";
       if (promptEl) promptEl.value = prefs.prompt_template || "";
+      if (onlyExpenseEl) onlyExpenseEl.checked = prefs.only_expense !== false;
     } catch (err) {
       AiClassification._showToast("读取 AI 配置失败: " + err.message);
     }
@@ -129,6 +151,7 @@ const AiClassification = {
     const categories = container.querySelector("#ai-categories").value.trim();
     const apiKey = container.querySelector("#ai-api-key").value.trim();
     const promptTemplate = container.querySelector("#ai-prompt-template").value.trim();
+    const onlyExpense = container.querySelector("#ai-only-expense").checked;
 
     if (!categories) {
       AiClassification._showToast("请填写分类");
@@ -185,6 +208,7 @@ const AiClassification = {
           api_key: apiKey,
           categories: categories,
           prompt_template: promptTemplate,
+          only_expense: onlyExpense,
         }),
         signal: controller.signal,
       });
