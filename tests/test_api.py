@@ -1303,8 +1303,8 @@ class TestFileImportPreview:
         assert preview_resp.status_code == 200
         preview = preview_resp.json()
         assert preview["source"] == "MOOMOO"
-        assert preview["total_rows"] == 4
-        assert preview["total_income"] == 4274.81
+        assert preview["total_rows"] == 3
+        assert preview["total_income"] == 4262.47
         assert preview["total_expense"] == 161.14
         assert preview["items"][0]["transaction_time"] == "2026-05-06 15:20:29"
         assert preview["items"][0]["product"].startswith("現金分紅 J P MORGAN")

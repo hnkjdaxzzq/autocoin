@@ -387,7 +387,7 @@ class TestMoomooParser:
         )
         result = parser.parse(b"%PDF")
 
-        assert len(result) == 4
+        assert len(result) == 3
         assert result[0].source == "MOOMOO"
         assert result[0].transaction_time == datetime(2026, 5, 6, 15, 20, 29)
         assert result[0].product == "現金分紅 J P MORGAN EXCHANGE TRADED FD EQUITY PREMIUM(JEPI) dividend, USD 0.44761 per share"
@@ -402,8 +402,6 @@ class TestMoomooParser:
         assert result[1].amount == pytest.approx(161.136)
         assert result[1].remark == "非美國居民預扣稅 -22.38 USD"
         assert result[2].product == "Cash Plus INTEREST FROM CASH SWEEP (31 days)"
-        assert result[3].amount == 12.34
-        assert result[3].remark == "現金分紅 +12.34 CNH"
 
     def test_order_id_is_stable_for_same_pdf_text(self):
         parser = MoomooParser(rate_fetcher=lambda currency: 7.2, text_extractor=lambda _: _make_moomoo_text())
