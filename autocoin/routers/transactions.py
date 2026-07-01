@@ -41,6 +41,7 @@ def list_transactions(
     search: Optional[str] = None,
     sort_by: str = "transaction_time",
     sort_dir: str = "desc",
+    include_deleted: bool = Query(False),
     repo: SQLiteRepository = Depends(get_repo),
 ):
     page_size = min(page_size, 200)
@@ -55,6 +56,7 @@ def list_transactions(
         search=search,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        include_deleted=include_deleted,
     )
     summary = repo.get_filtered_summary(
         start_date=start_date,
@@ -63,6 +65,7 @@ def list_transactions(
         category=category,
         source=source,
         search=search,
+        include_deleted=include_deleted,
     )
     total_pages = math.ceil(total / page_size) if page_size else 1
     return TransactionListResponse(

@@ -34,6 +34,7 @@ def _tx_to_dict(tx: Transaction) -> dict:
         "status": tx.status,
         "remark": tx.remark,
         "import_batch_id": tx.import_batch_id,
+        "is_deleted": tx.is_deleted,
         "created_at": tx.created_at.isoformat() if tx.created_at else None,
         "updated_at": tx.updated_at.isoformat() if tx.updated_at else None,
     }
@@ -197,11 +198,11 @@ class SQLiteRepository(DataRepository):
         category=None,
         source=None,
         search=None,
+        include_deleted: bool = False,
     ):
-        q = self._db.query(Transaction).filter(
-            Transaction.is_deleted == 0,
-            Transaction.user_id == self._user_id,
-        )
+        q = self._db.query(Transaction).filter(Transaction.user_id == self._user_id)
+        if not include_deleted:
+            q = q.filter(Transaction.is_deleted == 0)
 
         if start_date:
             q = q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
@@ -237,8 +238,17 @@ class SQLiteRepository(DataRepository):
         search: Optional[str] = None,
         sort_by: str = "transaction_time",
         sort_dir: str = "desc",
+        include_deleted: bool = False,
     ) -> tuple[list[dict], int]:
-        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = self._build_filter_query(
+            start_date,
+            end_date,
+            direction,
+            category,
+            source,
+            search,
+            include_deleted=include_deleted,
+        )
 
         total = q.count()
 
@@ -316,8 +326,17 @@ class SQLiteRepository(DataRepository):
         category=None,
         source=None,
         search=None,
+        include_deleted: bool = False,
     ) -> dict:
-        q = self._build_filter_query(start_date, end_date, direction, category, source, search)
+        q = self._build_filter_query(
+            start_date,
+            end_date,
+            direction,
+            category,
+            source,
+            search,
+            include_deleted=include_deleted,
+        )
 
         income_q = q.filter(Transaction.direction == "income")
         expense_q = q.filter(Transaction.direction == "expense")
@@ -350,7 +369,6 @@ class SQLiteRepository(DataRepository):
         tx = self._db.query(Transaction).filter(
             Transaction.id == id,
             Transaction.user_id == self._user_id,
-            Transaction.is_deleted == 0,
         ).first()
         if not tx:
             return False

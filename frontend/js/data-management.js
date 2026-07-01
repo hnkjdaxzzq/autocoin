@@ -375,6 +375,7 @@ const DataManagement = {
         ...filters,
         page: DataManagement._state.page,
         page_size: DataManagement._state.page_size,
+        include_deleted: true,
       });
       DataManagement._state.total = data.total;
       DataManagement._state.total_pages = data.total_pages;
@@ -434,7 +435,7 @@ const DataManagement = {
         </thead>
         <tbody>
           ${data.items.map(tx => `
-            <tr data-id="${tx.id}">
+            <tr data-id="${tx.id}" class="${tx.is_deleted ? "tx-row-deleted" : ""}" title="${tx.is_deleted ? "已软删除" : ""}">
               <td><input type="checkbox" class="tx-row-check" data-id="${tx.id}" ${DataManagement._state.selectedIds.has(tx.id) ? "checked" : ""}></td>
               <td style="white-space:nowrap">${fmtDate(tx.transaction_time)}</td>
               <td>${tx.source || "—"}</td>

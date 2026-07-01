@@ -436,6 +436,16 @@ td {
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 
+.tx-row-deleted td {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  opacity: .72;
+}
+
+.tx-row-deleted:hover td {
+  opacity: .86;
+}
+
 /* ===== Direction badge ===== */
 .badge {
   display: inline-flex;

@@ -204,6 +204,51 @@ class TestTransactions:
         get_resp = client.get(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
         assert get_resp.status_code == 404
 
+    def test_list_include_deleted(self, client, auth_headers):
+        create_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-01-18 10:00:00",
+            "direction": "expense",
+            "amount": 7,
+        })
+        tx_id = create_resp.json()["id"]
+
+        delete_resp = client.delete(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
+        assert delete_resp.status_code == 200
+
+        default_resp = client.get("/api/v1/transactions", headers=auth_headers)
+        assert default_resp.status_code == 200
+        assert tx_id not in [item["id"] for item in default_resp.json()["items"]]
+
+        include_resp = client.get("/api/v1/transactions?include_deleted=true", headers=auth_headers)
+        assert include_resp.status_code == 200
+        include_data = include_resp.json()
+        deleted_items = [item for item in include_data["items"] if item["id"] == tx_id]
+        assert len(deleted_items) == 1
+        assert deleted_items[0]["is_deleted"] == 1
+        assert include_data["summary"]["total_count"] == include_data["total"]
+
+    def test_include_deleted_is_user_scoped(self, client, auth_headers):
+        register_resp = client.post("/api/v1/auth/register", json={
+            "username": "deletedscopeuser",
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert register_resp.status_code == 201
+        other_headers = {"Authorization": f"Bearer {register_resp.json()['access_token']}"}
+
+        create_resp = client.post("/api/v1/transactions", headers=other_headers, json={
+            "transaction_time": "2025-01-19 10:00:00",
+            "direction": "expense",
+            "amount": 9,
+        })
+        other_tx_id = create_resp.json()["id"]
+        delete_resp = client.delete(f"/api/v1/transactions/{other_tx_id}", headers=other_headers)
+        assert delete_resp.status_code == 200
+
+        include_resp = client.get("/api/v1/transactions?include_deleted=true", headers=auth_headers)
+        assert include_resp.status_code == 200
+        assert other_tx_id not in [item["id"] for item in include_resp.json()["items"]]
+
     def test_categories(self, client, auth_headers):
         resp = client.get("/api/v1/transactions/categories", headers=auth_headers)
         assert resp.status_code == 200
@@ -245,6 +290,26 @@ class TestTransactions:
         for tx_id in ids:
             get_resp = client.get(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
             assert get_resp.status_code == 404
+
+    def test_batch_hard_delete_soft_deleted(self, client, auth_headers):
+        create_resp = client.post("/api/v1/transactions", headers=auth_headers, json={
+            "transaction_time": "2025-02-20 12:00:00",
+            "direction": "expense",
+            "amount": 30,
+        })
+        tx_id = create_resp.json()["id"]
+        delete_resp = client.delete(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
+        assert delete_resp.status_code == 200
+
+        hard_delete_resp = client.post("/api/v1/transactions/batch/hard-delete", headers=auth_headers, json={
+            "ids": [tx_id],
+        })
+        assert hard_delete_resp.status_code == 200
+        assert hard_delete_resp.json()["deleted"] == 1
+
+        include_resp = client.get("/api/v1/transactions?include_deleted=true", headers=auth_headers)
+        assert include_resp.status_code == 200
+        assert tx_id not in [item["id"] for item in include_resp.json()["items"]]
 
     def test_export_csv(self, client, auth_headers):
         resp = client.get("/api/v1/transactions/export/csv", headers=auth_headers)
