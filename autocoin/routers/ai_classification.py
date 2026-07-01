@@ -19,10 +19,11 @@ logger = logging.getLogger("autocoin")
 
 router = APIRouter(prefix="/ai-classification", tags=["ai-classification"])
 
-BATCH_SIZE = 100
+BATCH_SIZE = 50
 MAX_WORKERS = 5
 MAX_RETRIES = 3
 RETRY_DELAY = 2
+DEEPSEEK_MAX_TOKENS = 8192
 PREF_KEY_AI_CLASSIFICATION = "ai_classification.preferences"
 DEFAULT_CATEGORIES = "餐饮美食，交通出行，汽车，母婴儿童，娱乐，购物，生活缴费，社保费用，医疗，旅游，其他"
 
@@ -296,7 +297,7 @@ def _request_debug_preview(prompt: str, transactions: list[dict], categories: li
         "max_retries": 0,
         "response_format": {"type": "json_object"},
         "temperature": 0.1,
-        "max_tokens": 4096,
+        "max_tokens": DEEPSEEK_MAX_TOKENS,
         "system_message": "You are a precise transaction classifier. Always respond with valid JSON only.",
         "category_map": _build_category_map(categories),
         "batch_transaction_count": len(transactions),
@@ -358,7 +359,7 @@ def _classify_batch(
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.1,
-                max_tokens=4096,
+                max_tokens=DEEPSEEK_MAX_TOKENS,
             )
             content = response.choices[0].message.content.strip()
             response_debug = _response_debug_preview(response) if debug else ""

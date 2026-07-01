@@ -6,6 +6,8 @@ const AiClassification = {
     allResults: [],
     filteredResults: [],
     completeData: null,
+    latestFailedDetails: [],
+    latestTotalBatches: 0,
     promptExpanded: true,
     dateRangeExpanded: false,
     defaultPromptTemplate: "",
@@ -135,6 +137,12 @@ const AiClassification = {
   _bindEvents(container) {
     const btn = container.querySelector("#btn-ai-classify");
     btn.addEventListener("click", () => AiClassification._startClassification(container));
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-ai-debug-download]");
+      if (!btn) return;
+      e.preventDefault();
+      AiClassification._downloadDebugLog(btn.dataset.aiDebugDownload || "");
+    });
 
     // Enter key to trigger
     container.querySelector("#ai-categories").addEventListener("keydown", (e) => {
@@ -235,6 +243,8 @@ const AiClassification = {
     const btn = container.querySelector("#btn-ai-classify");
     const statusEl = container.querySelector("#ai-status");
     AiClassification._state.completeData = null;
+    AiClassification._state.latestFailedDetails = [];
+    AiClassification._state.latestTotalBatches = 0;
 
     btn.disabled = true;
     btn.textContent = "分类中...";
@@ -306,6 +316,8 @@ const AiClassification = {
       const decoder = new TextDecoder();
       let buffer = "";
       let completeData = null;
+      let latestFailedDetails = [];
+      let latestTotalBatches = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -365,6 +377,10 @@ const AiClassification = {
 
               updateProgress(phase, msg, pct);
               if (progressDetail) progressDetail.textContent = msg.replace(/^[^\s]+\s/, "");
+              latestFailedDetails = data.failed_details || latestFailedDetails;
+              latestTotalBatches = data.total_batches || latestTotalBatches;
+              AiClassification._state.latestFailedDetails = latestFailedDetails;
+              AiClassification._state.latestTotalBatches = latestTotalBatches;
               AiClassification._renderFailureDetails(failureDetailsEl, data.failed_details, data.total_batches);
 
             } else if (eventType === "complete") {
@@ -372,6 +388,10 @@ const AiClassification = {
               // Fill the bar
               updateProgress("complete", "✅ 分类完成", 100);
               if (progressDetail) progressDetail.textContent = `共处理 ${data.classified} 条，${data.changed} 条分类发生变更`;
+              latestFailedDetails = data.failed_details || latestFailedDetails;
+              latestTotalBatches = data.total_batches || latestTotalBatches;
+              AiClassification._state.latestFailedDetails = latestFailedDetails;
+              AiClassification._state.latestTotalBatches = latestTotalBatches;
               AiClassification._renderFailureDetails(failureDetailsEl, data.failed_details, data.total_batches);
             }
           } catch (e) {
@@ -538,6 +558,13 @@ const AiClassification = {
     document.body.appendChild(overlay);
     AiClassification._bindModalPagination(overlay, goToPage);
 
+    overlay.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-ai-debug-download]");
+      if (!btn) return;
+      e.preventDefault();
+      AiClassification._downloadDebugLog(btn.dataset.aiDebugDownload || "");
+    });
+
     overlay.querySelector("#modal-confirm-ai").addEventListener("click", async () => {
       await AiClassification._confirmChanges(container, overlay);
     });
@@ -653,7 +680,76 @@ const AiClassification = {
         </details>` : "";
       return `<div style="margin-top:4px">第 ${batch}/${totalB} 批（${count} 条）：${reason}${prompt}${requestDebug}${raw}${responseDebug}</div>`;
     }).join("");
-    return `<div style="margin-top:6px"><strong>失败详情（最近 ${recent.length} 条）</strong>${rows}</div>`;
+    return `
+      <div style="margin-top:6px">
+        <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap">
+          <strong>失败详情（最近 ${recent.length} 条）</strong>
+          <button type="button" class="btn btn-ghost" data-ai-debug-download="latest"
+            style="padding:5px 8px;font-size:12px;color:var(--text)">
+            下载调试日志
+          </button>
+        </div>
+        ${rows}
+      </div>`;
+  },
+
+  _downloadDebugLog(source) {
+    const data = AiClassification._state.completeData || {};
+    const details = (
+      Array.isArray(data.failed_details) && data.failed_details.length > 0
+        ? data.failed_details
+        : AiClassification._state.latestFailedDetails
+    ) || [];
+    const totalBatches = data.total_batches || AiClassification._state.latestTotalBatches || "";
+    if (!Array.isArray(details) || details.length === 0) {
+      AiClassification._showToast("暂无可下载的调试日志");
+      return;
+    }
+
+    const content = AiClassification._buildDebugLogText(details, totalBatches, source);
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `ai-classification-debug-${stamp}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  _buildDebugLogText(details, totalBatches, source) {
+    const lines = [
+      "AI 分类调试日志",
+      `生成时间: ${new Date().toISOString()}`,
+      `来源: ${source || "latest"}`,
+      `失败批次数: ${details.length}`,
+      `总批次数: ${totalBatches || "未知"}`,
+      "",
+    ];
+
+    details.forEach((item, idx) => {
+      lines.push(`===== 失败 ${idx + 1}/${details.length} =====`);
+      lines.push(`批次: ${item.batch || "?"}/${item.total_batches || totalBatches || "?"}`);
+      lines.push(`条数: ${item.count || 0}`);
+      lines.push(`原因: ${item.reason || "未知错误"}`);
+      lines.push("");
+      lines.push("----- 本批 Prompt -----");
+      lines.push(item.prompt_preview || "<empty>");
+      lines.push("");
+      lines.push("----- DeepSeek 请求内容 -----");
+      lines.push(item.request_debug_preview || "<empty>");
+      lines.push("");
+      lines.push("----- DeepSeek 原始返回 -----");
+      lines.push(item.raw_response_preview || "<empty>");
+      lines.push("");
+      lines.push("----- DeepSeek 响应元信息 -----");
+      lines.push(item.response_debug_preview || "<empty>");
+      lines.push("");
+    });
+
+    return lines.join("\n");
   },
 
   _escapeHtml(value) {

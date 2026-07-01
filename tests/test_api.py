@@ -370,6 +370,7 @@ class TestAIClassificationPreferences:
         )
 
         assert '"model": "deepseek-v4-flash"' in preview
+        assert '"max_tokens": 8192' in preview
         assert '"batch_transaction_count": 1' in preview
         assert '"batch_transaction_ids": [' in preview
         assert "1|餐饮|商户 A|商品 B" in preview
