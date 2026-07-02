@@ -99,6 +99,7 @@ def _summary_item_for_stock(
     stock_id: str,
     service: StockMarketService,
     refresh_prices: bool = True,
+    refresh_dividends: bool = False,
 ) -> Optional[dict]:
     row = (
         db.query(
@@ -150,6 +151,10 @@ def _summary_item_for_stock(
     current_return_rate = None
     if total_value is not None and total_cost:
         current_return_rate = round((total_value - total_cost) / total_cost * 100, 1)
+    if refresh_dividends:
+        service.external_sections(row.stock_market, row.stock_id, force_refresh=False)
+    dividend_selection = service.cached_dividend_selection(row.stock_market, row.stock_id)
+    dividend_refresh_needed = (not refresh_dividends) and dividend_selection is None
     return {
         "stock_market": row.stock_market,
         "stock_id": row.stock_id,
@@ -166,6 +171,11 @@ def _summary_item_for_stock(
         "price_from_cache": price_from_cache,
         "price_cache_stale": price_cache_stale,
         "price_refresh_needed": price_refresh_needed,
+        "stock_dividend_reference_year": (dividend_selection or {}).get("年份"),
+        "stock_dividend_frequency": (dividend_selection or {}).get("派息次数"),
+        "stock_dividend_per_share_last_year": (dividend_selection or {}).get("每股派息金额"),
+        "stock_dividend_change_rate": (dividend_selection or {}).get("环比变化"),
+        "stock_dividend_refresh_needed": dividend_refresh_needed,
     }
 
 
@@ -250,6 +260,7 @@ def create_stock(
 @router.get("/stocks/summary")
 def stock_summary(
     refresh_prices: bool = Query(False),
+    refresh_dividends: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -287,6 +298,7 @@ def stock_summary(
             row.stock_id,
             service,
             refresh_prices=refresh_prices,
+            refresh_dividends=refresh_dividends,
         )
         if item:
             items.append(item)

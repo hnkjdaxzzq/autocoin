@@ -350,9 +350,16 @@ body {
 }
 
 .stock-detail-col {
-  width: 64px;
+  width: 118px;
   padding-left: 10px;
   padding-right: 6px;
+}
+
+.stock-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .stock-detail-btn {
@@ -373,7 +380,6 @@ body {
 }
 
 .stock-dividend-btn {
-  margin-left: 8px;
   padding: 5px 9px;
   font-size: 12px;
   white-space: nowrap;

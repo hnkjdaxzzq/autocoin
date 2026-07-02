@@ -5,7 +5,7 @@ const StockManagement = {
     recordPages: {},
     lookupTimer: null,
     latestLookup: null,
-    priceRefreshInFlight: false,
+    summaryRefreshInFlight: false,
   },
 
   render(container) {
@@ -33,39 +33,44 @@ const StockManagement = {
       <div class="table-wrap" id="stock-table-wrap"></div>
     `;
     container.querySelector("#btn-new-stock").addEventListener("click", () => StockManagement.openModal(container));
-    container.querySelector("#btn-refresh-stocks").addEventListener("click", () => StockManagement.loadSummary(container, true, { showLoading: true, background: false }));
+    container.querySelector("#btn-refresh-stocks").addEventListener("click", () => StockManagement.loadSummary(container, { refreshPrices: true, refreshDividends: true, showLoading: true, background: false }));
     StockManagement.loadSummary(container);
   },
 
-  async loadSummary(container, refreshPrices = false, options = {}) {
+  async loadSummary(container, options = {}) {
+    const refreshPrices = options.refreshPrices === true;
+    const refreshDividends = options.refreshDividends === true;
     const showLoading = options.showLoading !== false;
     const background = options.background === true;
     const wrap = container.querySelector("#stock-table-wrap");
     if (showLoading) wrap.innerHTML = `<div class="loading">加载中...</div>`;
     try {
-      const data = await API.stockManagement.summary({ refresh_prices: refreshPrices ? "true" : "false" });
+      const data = await API.stockManagement.summary({
+        refresh_prices: refreshPrices ? "true" : "false",
+        refresh_dividends: refreshDividends ? "true" : "false",
+      });
       StockManagement._state.items = data.items || [];
       StockManagement.renderTable(container);
-      if (!refreshPrices && !background) {
-        StockManagement.refreshPricesIfNeeded(container);
+      if (!refreshPrices && !refreshDividends && !background) {
+        StockManagement.refreshSummaryIfNeeded(container);
       }
     } catch (err) {
       if (background) {
-        showToast(`刷新行情失败：${err.message}`);
+        showToast(`刷新股票数据失败：${err.message}`);
       } else {
         wrap.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
       }
     }
   },
 
-  refreshPricesIfNeeded(container) {
-    if (StockManagement._state.priceRefreshInFlight) return;
-    const needsRefresh = StockManagement._state.items.some(item => item.price_refresh_needed);
+  refreshSummaryIfNeeded(container) {
+    if (StockManagement._state.summaryRefreshInFlight) return;
+    const needsRefresh = StockManagement._state.items.some(item => item.price_refresh_needed || item.stock_dividend_refresh_needed);
     if (!needsRefresh) return;
-    StockManagement._state.priceRefreshInFlight = true;
-    StockManagement.loadSummary(container, true, { showLoading: false, background: true })
+    StockManagement._state.summaryRefreshInFlight = true;
+    StockManagement.loadSummary(container, { refreshPrices: true, refreshDividends: true, showLoading: false, background: true })
       .finally(() => {
-        StockManagement._state.priceRefreshInFlight = false;
+        StockManagement._state.summaryRefreshInFlight = false;
       });
   },
 
@@ -80,7 +85,6 @@ const StockManagement = {
       <table class="stock-table">
         <thead>
           <tr>
-            <th class="stock-detail-col"></th>
             <th class="stock-expand-col"></th>
             <th>股票代码</th>
             <th>股票名称</th>
@@ -90,8 +94,12 @@ const StockManagement = {
             <th>总成本</th>
             <th>当前收益率</th>
             <th>当前股价</th>
-            <th>平均成本</th>
+            <th>持仓成本</th>
             <th>每股派息(去年)</th>
+            <th>环比变化</th>
+            <th>股息率</th>
+            <th>持仓股息率</th>
+            <th class="stock-detail-col">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -129,11 +137,9 @@ const StockManagement = {
     const warning = item.lookup_error ? `<div class="stock-price-warning">${StockManagement.escape(item.lookup_error)}</div>` : "";
     const stale = item.price_cache_stale ? `<div class="stock-price-warning">行情缓存已过期，正在后台刷新</div>` : "";
     const pending = item.price_refresh_needed && !item.current_price ? `<div class="stock-price-warning">行情刷新中</div>` : "";
+    const dividendPending = item.stock_dividend_refresh_needed ? `<div class="stock-price-warning">股息刷新中</div>` : "";
     return `
       <tr class="stock-summary-row ${expanded ? "expanded" : ""}" data-key="${StockManagement.escape(key)}">
-        <td class="stock-detail-col">
-          <button class="btn btn-ghost stock-detail-btn" type="button" data-stock-details data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">详情</button>
-        </td>
         <td class="stock-expand-col"><span class="stock-expand-arrow">${expanded ? "▼" : "▶"}</span></td>
         <td><strong>${StockManagement.escape(item.stock_market)} · ${StockManagement.escape(item.stock_id)}</strong>${warning}</td>
         <td>${StockManagement.escape(item.stock_name || "--")}</td>
@@ -145,8 +151,17 @@ const StockManagement = {
         <td>${StockManagement.formatMoney(item.current_price, item.stock_currency)}${stale || pending}</td>
         <td>${StockManagement.formatMoney(item.stock_average_price, item.stock_currency, 2)}</td>
         <td class="stock-dividend-cell">
-          <span>--</span>
-          <button class="btn btn-ghost stock-dividend-btn" type="button" data-stock-dividends data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">股息</button>
+          <span title="${StockManagement.escape(StockManagement.dividendCellTitle(item))}">${StockManagement.formatMoney(item.stock_dividend_per_share_last_year, item.stock_currency, 2)}</span>
+          ${dividendPending}
+        </td>
+        <td class="${StockManagement.returnRateClass(item.stock_dividend_change_rate)}">${StockManagement.formatPercent(item.stock_dividend_change_rate)}</td>
+        <td>${StockManagement.formatDividendRate(item.stock_dividend_per_share_last_year, item.current_price)}</td>
+        <td>${StockManagement.formatDividendRate(item.stock_dividend_per_share_last_year, item.stock_average_price)}</td>
+        <td class="stock-detail-col">
+          <div class="stock-row-actions">
+            <button class="btn btn-ghost stock-detail-btn" type="button" data-stock-details data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">详情</button>
+            <button class="btn btn-ghost stock-dividend-btn" type="button" data-stock-dividends data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">股息</button>
+          </div>
         </td>
       </tr>
       ${expanded ? StockManagement.renderRecordsRow(item, page) : ""}
@@ -158,7 +173,7 @@ const StockManagement = {
     if (!pageData) {
       return `
         <tr class="stock-record-row">
-          <td colspan="12"><div class="loading">加载批次...</div></td>
+          <td colspan="15"><div class="loading">加载批次...</div></td>
         </tr>
       `;
     }
@@ -175,7 +190,7 @@ const StockManagement = {
     `).join("");
     return `
       <tr class="stock-record-row">
-        <td colspan="12">
+        <td colspan="15">
           <div class="stock-record-panel">
             <table>
               <thead>
@@ -765,6 +780,15 @@ const StockManagement = {
     return `<td>${StockManagement.escape(StockManagement.formatDetailValue(value))}</td>`;
   },
 
+  dividendCellTitle(item) {
+    if (item.stock_dividend_per_share_last_year === null || item.stock_dividend_per_share_last_year === undefined) {
+      return "暂无缓存的股息汇总数据";
+    }
+    const year = item.stock_dividend_reference_year || "--";
+    const frequency = item.stock_dividend_frequency ?? "--";
+    return `${year} 年，每股派息，派息次数 ${frequency}`;
+  },
+
   objectRows(obj) {
     return Object.entries(obj).map(([key, value]) => ({
       "字段": key,
@@ -790,6 +814,11 @@ const StockManagement = {
   formatPercent(value) {
     if (value === null || value === undefined) return "--";
     return `${Number(value).toFixed(1)}%`;
+  },
+
+  formatDividendRate(dividend, base) {
+    if (dividend === null || dividend === undefined || base === null || base === undefined || Number(base) === 0) return "--";
+    return StockManagement.formatPercent(Number(dividend) / Number(base) * 100);
   },
 
   returnRateClass(value) {

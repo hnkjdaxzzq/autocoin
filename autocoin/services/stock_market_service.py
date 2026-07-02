@@ -101,6 +101,24 @@ class StockMarketService:
             return self._us_external_sections(stock_id, force_refresh=force_refresh)
         raise StockLookupError("不支持的股票市场")
 
+    def cached_dividend_selection(self, market: str, stock_id: str) -> Optional[dict]:
+        market = market.upper()
+        stock_id = stock_id.strip().upper()
+        if market == "CN":
+            section = self._get_cached_query_payload("CN", stock_id, f"external:{THS_DIVIDEND_SOURCE}")
+            if not isinstance(section, dict) or section.get("status") != "ok":
+                return None
+            self._enrich_ths_dividend_section(section)
+            rows = ((section.get("dividend_parse") or {}).get("yearly_summary_rows") or [])
+            return self._select_dividend_summary_row(rows)
+        if market == "US":
+            section = self._get_cached_query_payload("US", stock_id, "external:yfinance.Ticker.get_dividends")
+            if not isinstance(section, dict) or section.get("status") != "ok":
+                return None
+            rows = self._us_yearly_dividend_summary(section.get("rows") or [])
+            return self._select_dividend_summary_row(rows)
+        return None
+
     def _cn_external_sections(self, stock_id: str, force_refresh: bool = False) -> list[dict]:
         try:
             import akshare as ak
@@ -515,6 +533,49 @@ class StockMarketService:
                 "环比变化": round(change, 2) if change is not None else None,
             }
         return [summary_by_year[year] for year in sorted(summary_by_year.keys(), reverse=True)[:5]]
+
+    @classmethod
+    def _us_yearly_dividend_summary(cls, rows: list[dict]) -> list[dict]:
+        yearly = {}
+        yearly_counts = {}
+        for row in rows:
+            year = cls._year_from_report_period(row.get("date"))
+            dividend = row.get("dividend")
+            if year is None or dividend is None:
+                continue
+            try:
+                amount = float(dividend)
+            except (TypeError, ValueError):
+                continue
+            yearly[year] = yearly.get(year, 0) + amount
+            yearly_counts[year] = yearly_counts.get(year, 0) + 1
+        summary_by_year = {}
+        for year, amount in sorted(yearly.items()):
+            previous_amount = yearly.get(year - 1)
+            change = None
+            if previous_amount:
+                change = (amount - previous_amount) / previous_amount * 100
+            summary_by_year[year] = {
+                "年份": year,
+                "派息次数": yearly_counts.get(year, 0),
+                "每股派息金额": round(amount, 6),
+                "环比变化": round(change, 2) if change is not None else None,
+            }
+        return [summary_by_year[year] for year in sorted(summary_by_year.keys(), reverse=True)[:5]]
+
+    @staticmethod
+    def _select_dividend_summary_row(rows: list[dict]) -> Optional[dict]:
+        if not rows:
+            return None
+        if len(rows) == 1:
+            return rows[0]
+        latest = rows[0]
+        previous = rows[1]
+        latest_count = latest.get("派息次数") or 0
+        previous_count = previous.get("派息次数") or 0
+        if latest_count >= previous_count:
+            return latest
+        return rows[2] if len(rows) >= 3 else None
 
     @staticmethod
     def _year_from_report_period(value) -> Optional[int]:

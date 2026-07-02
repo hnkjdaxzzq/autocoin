@@ -1655,6 +1655,19 @@ class TestStockManagement:
         assert parsed["yearly_summary_rows"][0] == {"年份": 2026, "派息次数": 1, "每股派息金额": 0.2, "环比变化": -91.31}
         assert parsed["yearly_summary_rows"][1] == {"年份": 2025, "派息次数": 2, "每股派息金额": 2.3012, "环比变化": 130.12}
 
+    def test_dividend_summary_selection_uses_frequency_rule(self):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        rows = [
+            {"年份": 2026, "派息次数": 1, "每股派息金额": 0.2},
+            {"年份": 2025, "派息次数": 2, "每股派息金额": 2.3},
+            {"年份": 2024, "派息次数": 2, "每股派息金额": 1.0},
+        ]
+        assert StockMarketService._select_dividend_summary_row(rows)["年份"] == 2024
+
+        rows[0]["派息次数"] = 2
+        assert StockMarketService._select_dividend_summary_row(rows)["年份"] == 2026
+
     def test_cn_stock_details_returns_summary_records_and_sections(self, client, monkeypatch):
         from autocoin.services.stock_market_service import StockMarketService
 
@@ -1914,6 +1927,53 @@ class TestStockManagement:
         assert refresh_resp.status_code == 200
         assert calls["count"] == 2
         assert refresh_resp.json()["items"][0]["lookup_error"] == "行情不可用"
+
+    def test_stock_summary_refreshes_dividends_when_requested(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        calls = {"dividends": 0}
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "股息股票", "current_price": 10.0}
+
+        def fake_external_sections(self, market, stock_id, force_refresh=False):
+            calls["dividends"] += 1
+            return []
+
+        def fake_cached_dividend_selection(self, market, stock_id):
+            if calls["dividends"] == 0:
+                return None
+            return {"年份": 2025, "派息次数": 2, "每股派息金额": 1.23, "环比变化": 4.56}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "external_sections", fake_external_sections)
+        monkeypatch.setattr(StockMarketService, "cached_dividend_selection", fake_cached_dividend_selection)
+        headers = self._register_headers(client, "stocksummarydividends")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600004",
+            "stock_amount": 2,
+            "stock_average_price": 10,
+        })
+        assert create_resp.status_code == 201
+
+        summary_resp = client.get("/api/v1/stock-management/stocks/summary", headers=headers)
+        assert summary_resp.status_code == 200
+        item = summary_resp.json()["items"][0]
+        assert calls["dividends"] == 0
+        assert item["stock_dividend_per_share_last_year"] is None
+        assert item["stock_dividend_refresh_needed"] is True
+
+        refresh_resp = client.get("/api/v1/stock-management/stocks/summary?refresh_dividends=true", headers=headers)
+        assert refresh_resp.status_code == 200
+        refreshed = refresh_resp.json()["items"][0]
+        assert calls["dividends"] == 1
+        assert refreshed["stock_dividend_reference_year"] == 2025
+        assert refreshed["stock_dividend_frequency"] == 2
+        assert refreshed["stock_dividend_per_share_last_year"] == 1.23
+        assert refreshed["stock_dividend_change_rate"] == 4.56
+        assert refreshed["stock_dividend_refresh_needed"] is False
 
     def test_stock_summary_uses_stale_cache_before_async_refresh(self, client, monkeypatch):
         from datetime import datetime, timedelta
