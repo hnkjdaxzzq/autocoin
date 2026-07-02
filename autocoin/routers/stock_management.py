@@ -236,6 +236,15 @@ def _portfolio_metric_row(currency: str, items: list[dict], rate: float = 1.0, r
         ((_num(item.get("stock_dividend_per_share_last_year")) or 0) * (_num(item.get("stock_amount")) or 0) * rate)
         for item in items
     )
+    after_tax_dividend = sum(
+        (
+            (_num(item.get("stock_dividend_per_share_last_year")) or 0)
+            * (_num(item.get("stock_amount")) or 0)
+            * (0.8 if item.get("stock_market") == "US" else 1.0)
+            * rate
+        )
+        for item in items
+    )
     principal_return_rate = None
     if total_cost and not asset_value_pending and not asset_value_missing:
         principal_return_rate = (total_value - total_cost) / total_cost * 100
@@ -248,6 +257,7 @@ def _portfolio_metric_row(currency: str, items: list[dict], rate: float = 1.0, r
         "holding_total_cost": None if rate_error else round(total_cost, 2),
         "principal_return_rate": None if principal_return_rate is None or rate_error else round(principal_return_rate, 1),
         "annual_dividend": None if dividend_pending or dividend_missing or rate_error else round(annual_dividend, 2),
+        "after_tax_dividend": None if dividend_pending or dividend_missing or rate_error else round(after_tax_dividend, 2),
         "holding_dividend_rate": None if holding_dividend_rate is None or rate_error else round(holding_dividend_rate, 1),
         "asset_value_pending": asset_value_pending,
         "dividend_pending": dividend_pending,
@@ -299,6 +309,7 @@ def _portfolio_summary(items: list[dict], service: StockMarketService) -> dict:
             "holding_total_cost": None,
             "principal_return_rate": None,
             "annual_dividend": None,
+            "after_tax_dividend": None,
             "holding_dividend_rate": None,
         }
         converted_values = []
@@ -312,6 +323,7 @@ def _portfolio_summary(items: list[dict], service: StockMarketService) -> dict:
         converted_row["asset_total_value"] = None if converted_row["asset_value_pending"] or asset_value_missing else round(sum(row["asset_total_value"] or 0 for row in converted_values), 2)
         converted_row["holding_total_cost"] = round(sum(row["holding_total_cost"] or 0 for row in converted_values), 2)
         converted_row["annual_dividend"] = None if converted_row["dividend_pending"] or dividend_missing else round(sum(row["annual_dividend"] or 0 for row in converted_values), 2)
+        converted_row["after_tax_dividend"] = None if converted_row["dividend_pending"] or dividend_missing else round(sum(row["after_tax_dividend"] or 0 for row in converted_values), 2)
         if converted_row["holding_total_cost"] and not converted_row["asset_value_pending"] and not asset_value_missing:
             converted_row["principal_return_rate"] = round(
                 (converted_row["asset_total_value"] - converted_row["holding_total_cost"]) / converted_row["holding_total_cost"] * 100,

@@ -1686,10 +1686,12 @@ class TestStockManagement:
         assert rows["CNY"]["holding_total_cost"] == 100
         assert rows["CNY"]["principal_return_rate"] == 20.0
         assert rows["CNY"]["annual_dividend"] == 5
+        assert rows["CNY"]["after_tax_dividend"] == 5
         assert rows["CNY"]["holding_dividend_rate"] == 5.0
         assert rows["USD"]["asset_total_value"] == 110
         assert rows["USD"]["holding_total_cost"] == 100
         assert rows["USD"]["annual_dividend"] == 8
+        assert rows["USD"]["after_tax_dividend"] == 6.4
         total = portfolio["converted_total"]
         assert total["currency"] == "CNY"
         assert total["is_converted"] is True
@@ -1697,6 +1699,7 @@ class TestStockManagement:
         assert total["holding_total_cost"] == 820
         assert total["principal_return_rate"] == 11.2
         assert total["annual_dividend"] == 62.6
+        assert total["after_tax_dividend"] == 51.08
         assert total["holding_dividend_rate"] == 7.6
 
     def test_lookup_uses_existing_schema_without_id_column(self, client, monkeypatch):

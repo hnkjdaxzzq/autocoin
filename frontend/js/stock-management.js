@@ -243,10 +243,11 @@ const StockManagement = {
               <th>本金收益率</th>
               <th>持仓股息率</th>
               <th>预计股息/年</th>
+              <th>税后股息</th>
             </tr>
           </thead>
           <tbody>
-            ${rows.length ? rows.map(row => StockManagement.renderPortfolioSummaryRow(row)).join("") : StockManagement.renderEmptyTableRow(6)}
+            ${rows.length ? rows.map(row => StockManagement.renderPortfolioSummaryRow(row)).join("") : StockManagement.renderEmptyTableRow(7)}
           </tbody>
         </table>
       </div>
@@ -267,6 +268,7 @@ const StockManagement = {
         <td class="${StockManagement.returnRateClass(row.principal_return_rate)}">${StockManagement.renderPortfolioPercent(row.principal_return_rate, row.asset_value_pending)}</td>
         <td>${StockManagement.renderPortfolioPercent(row.holding_dividend_rate, row.dividend_pending)}</td>
         <td>${StockManagement.renderPortfolioValue(row.annual_dividend, row.currency, row.dividend_pending)}</td>
+        <td>${StockManagement.renderPortfolioValue(row.after_tax_dividend, row.currency, row.dividend_pending)}</td>
       </tr>
     `;
   },
