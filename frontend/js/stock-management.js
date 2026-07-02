@@ -98,7 +98,7 @@ const StockManagement = {
           </tr>
         </thead>
         <tbody>
-          ${items.length ? items.map((item, index) => StockManagement.renderSummaryRows(item, index)).join("") : StockManagement.renderEmptyTableRow(15)}
+          ${items.length ? items.map((item, index) => StockManagement.renderSummaryRows(item, index)).join("") : StockManagement.renderEmptyTableRow(16)}
         </tbody>
       </table>
     `;
@@ -161,6 +161,7 @@ const StockManagement = {
       { key: "stock_dividend_change_rate", label: "环比变化", type: "number" },
       { key: "dividend_rate", label: "股息率", type: "number" },
       { key: "holding_dividend_rate", label: "持仓股息率", type: "number" },
+      { key: "annual_dividend", label: "预计股息/年", type: "number" },
     ];
   },
 
@@ -219,6 +220,7 @@ const StockManagement = {
     if (key === "holding_dividend_rate") {
       return StockManagement.rateValue(item.stock_dividend_per_share_last_year, item.stock_average_price);
     }
+    if (key === "annual_dividend") return StockManagement.annualDividendValue(item);
     return item[key];
   },
 
@@ -329,6 +331,7 @@ const StockManagement = {
         <td class="${StockManagement.returnRateClass(item.stock_dividend_change_rate)}">${StockManagement.formatPercent(item.stock_dividend_change_rate)}</td>
         <td>${StockManagement.formatDividendRate(item.stock_dividend_per_share_last_year, item.current_price)}</td>
         <td>${StockManagement.formatDividendRate(item.stock_dividend_per_share_last_year, item.stock_average_price)}</td>
+        <td>${StockManagement.renderAnnualDividend(item, dividendLoading)}</td>
         <td class="stock-detail-col">
           <div class="stock-row-actions">
             <button class="btn btn-ghost stock-detail-btn" type="button" data-stock-details data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">详情</button>
@@ -345,7 +348,7 @@ const StockManagement = {
     if (!pageData) {
       return `
         <tr class="stock-record-row">
-          <td colspan="15"><div class="loading">加载批次...</div></td>
+          <td colspan="16"><div class="loading">加载批次...</div></td>
         </tr>
       `;
     }
@@ -368,7 +371,7 @@ const StockManagement = {
     `).join("");
     return `
       <tr class="stock-record-row">
-        <td colspan="15">
+        <td colspan="16">
           <div class="stock-record-panel">
             <table>
               <thead>
@@ -1124,6 +1127,19 @@ const StockManagement = {
     const year = item.stock_dividend_reference_year || "--";
     const frequency = item.stock_dividend_frequency ?? "--";
     return `${year} 年，每股派息，派息次数 ${frequency}`;
+  },
+
+  annualDividendValue(item) {
+    if (!item) return null;
+    const dividend = Number(item.stock_dividend_per_share_last_year);
+    const amount = Number(item.stock_amount);
+    if (!Number.isFinite(dividend) || !Number.isFinite(amount)) return null;
+    return dividend * amount;
+  },
+
+  renderAnnualDividend(item, loading) {
+    if (loading) return StockManagement.loadingDots();
+    return StockManagement.formatMoneyInteger(StockManagement.annualDividendValue(item), item.stock_currency);
   },
 
   objectRows(obj) {
