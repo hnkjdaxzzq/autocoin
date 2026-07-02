@@ -90,16 +90,16 @@ class StockMarketService:
         self._db.flush()
         return int(deleted or 0)
 
-    def external_sections(self, market: str, stock_id: str) -> list[dict]:
+    def external_sections(self, market: str, stock_id: str, force_refresh: bool = False) -> list[dict]:
         market = market.upper()
         stock_id = stock_id.strip().upper()
         if market == "CN":
-            return self._cn_external_sections(stock_id)
+            return self._cn_external_sections(stock_id, force_refresh=force_refresh)
         if market == "US":
-            return self._us_external_sections(stock_id)
+            return self._us_external_sections(stock_id, force_refresh=force_refresh)
         raise StockLookupError("不支持的股票市场")
 
-    def _cn_external_sections(self, stock_id: str) -> list[dict]:
+    def _cn_external_sections(self, stock_id: str, force_refresh: bool = False) -> list[dict]:
         try:
             import akshare as ak
         except ImportError as exc:
@@ -117,28 +117,32 @@ class StockMarketService:
                 "akshare.stock_dividend_cninfo",
                 stock_id,
                 lambda: ak.stock_dividend_cninfo(symbol=stock_id),
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "新浪财经分红历史",
                 "akshare.stock_history_dividend_detail",
                 stock_id,
                 lambda: ak.stock_history_dividend_detail(symbol=stock_id, indicator="分红"),
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "东方财富分红送配详情",
                 "akshare.stock_fhps_detail_em",
                 stock_id,
                 lambda: ak.stock_fhps_detail_em(symbol=stock_id),
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "同花顺分红情况",
                 "akshare.stock_fhps_detail_ths",
                 stock_id,
                 lambda: ak.stock_fhps_detail_ths(symbol=stock_id),
+                force_refresh=force_refresh,
             ),
         ]
 
-    def _us_external_sections(self, stock_id: str) -> list[dict]:
+    def _us_external_sections(self, stock_id: str, force_refresh: bool = False) -> list[dict]:
         try:
             import yfinance as yf
         except ImportError as exc:
@@ -157,24 +161,28 @@ class StockMarketService:
                 "yfinance.Ticker.get_info",
                 stock_id,
                 lambda: self._dict_to_rows(ticker.get_info() or {}),
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "Yahoo Finance 历史股息",
                 "yfinance.Ticker.get_dividends",
                 stock_id,
                 lambda: self._series_to_rows(ticker.get_dividends(period="max"), "dividend"),
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "Yahoo Finance 公司行为",
                 "yfinance.Ticker.actions",
                 stock_id,
                 lambda: ticker.actions,
+                force_refresh=force_refresh,
             ),
             self._section_from_call(
                 "Yahoo Finance 非零分红/拆股历史",
                 "yfinance.Ticker.history(actions=True)",
                 stock_id,
                 lambda: self._nonzero_action_rows(ticker.history(period="max", actions=True)),
+                force_refresh=force_refresh,
             ),
         ]
 
@@ -360,14 +368,15 @@ class StockMarketService:
             },
         }
 
-    def _section_from_call(self, title: str, source: str, stock_id: str, fn) -> dict:
+    def _section_from_call(self, title: str, source: str, stock_id: str, fn, force_refresh: bool = False) -> dict:
         market = "US" if source.startswith("yfinance.") else "CN"
         query_key = f"external:{source}"
-        cached_payload = self._get_cached_query_payload(market, stock_id, query_key)
+        cached_payload = None if force_refresh else self._get_cached_query_payload(market, stock_id, query_key)
         if cached_payload:
             cached_payload["from_cache"] = True
             return cached_payload
         try:
+            now = datetime.utcnow()
             columns, rows = self._tabular_data(fn())
             section = {
                 "title": title,
@@ -377,12 +386,15 @@ class StockMarketService:
                 "rows": rows,
                 "error": None,
                 "from_cache": False,
+                "queried_at": now.isoformat(),
             }
-            self._set_query_cache(market, stock_id, query_key, section)
+            self._set_query_cache(market, stock_id, query_key, section, now=now)
             return section
         except Exception as exc:
+            now = datetime.utcnow()
             section = self._error_section(title, source, str(exc))
-            self._set_query_cache(market, stock_id, query_key, section)
+            section["queried_at"] = now.isoformat()
+            self._set_query_cache(market, stock_id, query_key, section, now=now)
             return section
 
     @staticmethod
@@ -395,6 +407,7 @@ class StockMarketService:
             "rows": [],
             "error": error,
             "from_cache": False,
+            "queried_at": None,
         }
 
     @classmethod

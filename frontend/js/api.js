@@ -503,8 +503,10 @@ const API = {
       apiFetch("/stock-management/stocks/summary?" + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       )),
-    details: (market, stockId) =>
-      apiFetch(`/stock-management/stocks/${encodeURIComponent(market)}/${encodeURIComponent(stockId)}/details`),
+    details: (market, stockId, params = {}) =>
+      apiFetch(`/stock-management/stocks/${encodeURIComponent(market)}/${encodeURIComponent(stockId)}/details?` + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
     records: (market, stockId, params) =>
       apiFetch(`/stock-management/stocks/${encodeURIComponent(market)}/${encodeURIComponent(stockId)}/records?` + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))

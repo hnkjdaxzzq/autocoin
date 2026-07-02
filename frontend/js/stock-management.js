@@ -396,11 +396,17 @@ const StockManagement = {
     overlay.innerHTML = `
       <div class="modal-dialog modal-dialog-lg stock-details-modal">
         <div class="stock-details-header">
-          <div>
+          <div class="stock-details-title-block">
             <div class="modal-title">股票详情</div>
-            <div class="stock-details-subtitle">${StockManagement.escape(market)} · ${StockManagement.escape(stockId)}</div>
+            <div class="stock-details-meta-row">
+              <div class="stock-details-subtitle">${StockManagement.escape(market)} · ${StockManagement.escape(stockId)}</div>
+              <span class="stock-details-updated-at" data-stock-details-updated>更新时间：--</span>
+              <button class="btn btn-ghost stock-details-refresh" type="button" data-stock-details-refresh>更新</button>
+            </div>
           </div>
-          <button class="btn btn-ghost stock-details-close" type="button" aria-label="关闭">×</button>
+          <div class="stock-details-actions">
+            <button class="btn btn-ghost stock-details-close" type="button" aria-label="关闭">×</button>
+          </div>
         </div>
         <div class="stock-details-body">
           <div class="loading">正在查询股票详情...</div>
@@ -414,19 +420,34 @@ const StockManagement = {
     const close = () => overlay.remove();
     overlay.querySelector(".stock-details-close").addEventListener("click", close);
     overlay.querySelector("[data-stock-details-close]").addEventListener("click", close);
+    overlay.querySelector("[data-stock-details-refresh]").addEventListener("click", () => {
+      StockManagement.loadDetails(overlay, market, stockId, true);
+    });
     overlay.addEventListener("click", event => {
       if (event.target === overlay) close();
     });
     StockManagement.loadDetails(overlay, market, stockId);
   },
 
-  async loadDetails(overlay, market, stockId) {
+  async loadDetails(overlay, market, stockId, forceRefresh = false) {
     const body = overlay.querySelector(".stock-details-body");
+    const refreshBtn = overlay.querySelector("[data-stock-details-refresh]");
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = forceRefresh ? "更新中" : "更新";
+    }
     try {
-      const data = await API.stockManagement.details(market, stockId);
+      const data = await API.stockManagement.details(market, stockId, { force_refresh: forceRefresh ? "true" : "false" });
+      const updatedEl = overlay.querySelector("[data-stock-details-updated]");
+      if (updatedEl) updatedEl.textContent = `更新时间：${StockManagement.formatDateTime(data.updated_at) || "--"}`;
       body.innerHTML = StockManagement.renderDetails(data);
     } catch (err) {
       body.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "更新";
+      }
     }
   },
 

@@ -298,6 +298,7 @@ def stock_summary(
 def stock_details(
     stock_market: str,
     stock_id: str,
+    force_refresh: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -311,7 +312,11 @@ def stock_details(
     if not summary:
         raise HTTPException(status_code=404, detail="未找到该股票资产")
 
-    lookup, lookup_error = service.try_lookup(market, code)
+    lookup, lookup_error = None, None
+    try:
+        lookup = service.lookup(market, code, force_refresh=force_refresh)
+    except Exception as exc:
+        lookup_error = str(exc)
     records = (
         db.query(StockData)
         .filter(
@@ -322,7 +327,13 @@ def stock_details(
         .order_by(StockData.created_at.desc(), StockData.stock_vid.desc())
         .all()
     )
-    external_sections = service.external_sections(market, code)
+    external_sections = service.external_sections(market, code, force_refresh=force_refresh)
+    queried_times = [
+        value
+        for value in [((lookup or {}).get("queried_at"))]
+        + [section.get("queried_at") for section in external_sections]
+        if value
+    ]
     db.commit()
     return {
         "summary": summary,
@@ -330,6 +341,7 @@ def stock_details(
         "lookup_error": lookup_error,
         "records": [_stock_to_dict(item) for item in records],
         "external_sections": external_sections,
+        "updated_at": max(queried_times) if queried_times else None,
     }
 
 

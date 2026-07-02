@@ -443,6 +443,7 @@ body {
   max-height: 88vh;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .stock-details-header {
@@ -451,6 +452,46 @@ body {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 12px;
+  padding-right: 42px;
+}
+
+.stock-details-title-block {
+  min-width: 0;
+}
+
+.stock-details-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.stock-details-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stock-details-updated-at {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stock-details-refresh {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.stock-details-refresh:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .stock-details-subtitle,
@@ -461,6 +502,9 @@ body {
 }
 
 .stock-details-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
   width: 32px;
   height: 32px;
   padding: 0;

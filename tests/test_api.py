@@ -1603,7 +1603,7 @@ class TestStockManagement:
                 "raw_api_data": {"代码": stock_id},
             }
 
-        def fake_sections(self, market, stock_id):
+        def fake_sections(self, market, stock_id, force_refresh=False):
             assert market == "CN"
             assert stock_id == "600941"
             return [
@@ -1671,7 +1671,7 @@ class TestStockManagement:
         def fake_lookup(self, market, stock_id):
             return {"stock_name": "JEPI", "current_price": 55.0}
 
-        def fake_sections(self, market, stock_id):
+        def fake_sections(self, market, stock_id, force_refresh=False):
             assert market == "US"
             assert stock_id == "JEPI"
             return [
@@ -1924,13 +1924,14 @@ class TestStockManagement:
         def fake_lookup(self, market, stock_id):
             return {"stock_name": "JEPI", "current_price": 55.0}
 
-        def fake_us_sections(self, stock_id):
+        def fake_us_sections(self, stock_id, force_refresh=False):
             return [
                 self._section_from_call(
                     "Yahoo Finance 基础信息",
                     "yfinance.Ticker.get_info",
                     stock_id,
                     make_section,
+                    force_refresh=force_refresh,
                 )
             ]
 
@@ -1952,13 +1953,18 @@ class TestStockManagement:
 
         first = client.get("/api/v1/stock-management/stocks/US/JEPI/details", headers=headers)
         second = client.get("/api/v1/stock-management/stocks/US/JEPI/details", headers=headers)
+        refreshed = client.get("/api/v1/stock-management/stocks/US/JEPI/details?force_refresh=true", headers=headers)
 
         assert first.status_code == 200
         assert second.status_code == 200
-        assert calls["count"] == 1
+        assert refreshed.status_code == 200
+        assert calls["count"] == 2
         assert first.json()["external_sections"][0]["from_cache"] is False
         assert second.json()["external_sections"][0]["from_cache"] is True
         assert second.json()["external_sections"][0]["rows"][0]["value"] == 1
+        assert refreshed.json()["external_sections"][0]["from_cache"] is False
+        assert refreshed.json()["external_sections"][0]["rows"][0]["value"] == 2
+        assert refreshed.json()["updated_at"]
 
     def test_cleanup_expired_stock_api_cache(self, client):
         from datetime import datetime, timedelta
