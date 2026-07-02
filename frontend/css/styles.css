@@ -710,11 +710,13 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   border: 2px dashed var(--border);
   border-radius: var(--radius);
   background: var(--card-bg);
-  padding: 48px 32px;
-  text-align: center;
+  padding: 32px;
   cursor: pointer;
   transition: border-color .2s, background .2s, transform .2s;
   margin-bottom: 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 32px;
 }
 
 .drop-zone:hover {
@@ -726,6 +728,54 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   border-color: var(--primary);
   background: var(--primary-light);
   transform: scale(1.01);
+}
+
+.drop-guide {
+  flex: 0 0 280px;
+  text-align: left;
+  padding: 16px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drop-guide-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.drop-guide-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.drop-guide-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.drop-guide-list li {
+  margin-bottom: 4px;
+}
+
+.drop-guide-list li strong {
+  color: var(--text);
+}
+
+.drop-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .drop-icon {
@@ -1490,7 +1540,16 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   }
 
   .drop-zone {
-    padding: 32px 16px;
+    padding: 20px 16px;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .drop-guide {
+    flex: none;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
   }
 
   .drop-zone .drop-hint {
@@ -2275,10 +2334,27 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 }
 
 .import-hover-toast {
-  max-width: min(760px, calc(100vw - 32px));
+  position: fixed;
+  z-index: 3000;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--card-bg);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
   line-height: 1.6;
   text-align: left;
   white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.import-hover-toast.show {
+  opacity: .95;
+  transform: translateY(0);
 }
 
 .modal-table-wrap {

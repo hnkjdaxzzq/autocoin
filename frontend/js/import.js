@@ -34,18 +34,28 @@ const Import = {
       <!-- File import panel -->
       <div id="tab-file" class="import-tab-panel active">
         <div id="drop-zone" class="drop-zone">
-          <div class="drop-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width:40px;height:40px;color:var(--primary)"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <div class="drop-main">
+            <div class="drop-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="width:40px;height:40px;color:var(--primary)"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="drop-hint">拖拽账单文件到此处</div>
+            <div class="drop-sub">支持支付宝 .csv 和微信支付 .xlsx 格式</div>
+            <div style="margin-top:16px">
+              <label class="btn btn-ghost" for="file-input" style="cursor:pointer">选择文件</label>
+              <input type="file" id="file-input" accept=".csv,.xlsx" style="display:none" multiple>
+              <input type="file" id="cmb-securities-file-input" accept=".xls" style="display:none" multiple>
+              <input type="file" id="ibkr-file-input" accept=".csv" style="display:none" multiple>
+              <input type="file" id="moomoo-file-input" accept=".pdf" style="display:none" multiple>
+              <input type="file" id="hsbc-pulse-file-input" accept=".pdf" style="display:none" multiple>
+            </div>
           </div>
-          <div class="drop-hint">拖拽账单文件到此处</div>
-          <div class="drop-sub">支持支付宝 .csv 和微信支付 .xlsx 格式</div>
-          <div style="margin-top:16px">
-            <label class="btn btn-ghost" for="file-input" style="cursor:pointer">选择文件</label>
-            <input type="file" id="file-input" accept=".csv,.xlsx" style="display:none" multiple>
-            <input type="file" id="cmb-securities-file-input" accept=".xls" style="display:none" multiple>
-            <input type="file" id="ibkr-file-input" accept=".csv" style="display:none" multiple>
-            <input type="file" id="moomoo-file-input" accept=".pdf" style="display:none" multiple>
-            <input type="file" id="hsbc-pulse-file-input" accept=".pdf" style="display:none" multiple>
+          <div class="drop-guide">
+            <div class="drop-guide-title">导入建议</div>
+            <div class="drop-guide-text">导入账单文件后，建议按如下顺序执行：</div>
+            <ol class="drop-guide-list">
+              <li><strong>高级功能 &gt; 特殊数据处理</strong>：将收支中的退款数据配对标记为不统计；将余额宝数据排除</li>
+              <li><strong>AI分析</strong>：设定想要的所有分类，将数据自动归类</li>
+            </ol>
           </div>
         </div>
 
@@ -171,8 +181,8 @@ const Import = {
     container.querySelectorAll(".quick-import-btn").forEach(btn => {
       const hoverTip = hoverTips[btn.dataset.source];
       if (hoverTip) {
-        btn.addEventListener("mouseenter", () => Import._showHoverToast(hoverTip));
-        btn.addEventListener("focus", () => Import._showHoverToast(hoverTip));
+        btn.addEventListener("mouseenter", (e) => Import._showHoverToast(hoverTip, e));
+        btn.addEventListener("focus", (e) => Import._showHoverToast(hoverTip, e));
         btn.addEventListener("mouseleave", () => Import._hideHoverToast());
         btn.addEventListener("blur", () => Import._hideHoverToast());
       }
@@ -216,20 +226,36 @@ const Import = {
     });
   },
 
-  _showHoverToast(message) {
+  _showHoverToast(message, e) {
     clearTimeout(Import._hoverToastTimer);
-    const existing = document.querySelector(".toast-message");
+    const existing = document.querySelector(".import-hover-toast");
     if (existing) existing.remove();
     const toast = document.createElement("div");
-    toast.className = "toast-message import-hover-toast";
+    toast.className = "import-hover-toast";
     toast.textContent = message;
     document.body.appendChild(toast);
-    setTimeout(() => toast.classList.add("show"), 10);
+    // 计算位置：鼠标下方偏移 12px，并保证不超出视口
+    const rect = e.target.getBoundingClientRect();
+    const x = e.clientX || (rect.left + rect.width / 2);
+    const y = e.clientY || rect.bottom;
+    toast.style.visibility = "hidden";
+    toast.style.display = "block";
+    const tw = toast.offsetWidth;
+    const th = toast.offsetHeight;
+    let left = x - tw / 2;
+    let top = y + 28;
+    if (left < 8) left = 8;
+    if (left + tw > window.innerWidth - 8) left = window.innerWidth - 8 - tw;
+    if (top + th > window.innerHeight - 8) top = y - th - 8;
+    toast.style.left = left + "px";
+    toast.style.top = top + "px";
+    toast.style.visibility = "";
+    requestAnimationFrame(() => toast.classList.add("show"));
   },
 
   _hideHoverToast() {
     clearTimeout(Import._hoverToastTimer);
-    const toast = document.querySelector(".toast-message.import-hover-toast");
+    const toast = document.querySelector(".import-hover-toast");
     if (!toast) return;
     toast.classList.remove("show");
     Import._hoverToastTimer = setTimeout(() => toast.remove(), 200);
