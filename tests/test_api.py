@@ -1592,6 +1592,60 @@ class TestStockManagement:
         assert resp.status_code == 200
         assert resp.json()["stock_name"] == "Apple Inc."
 
+    def test_ths_dividend_section_adds_per_share_parse(self):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        section = {
+            "columns": ["公告日期", "报告期", "除权除息日期", "分红方案说明"],
+            "rows": [
+                {
+                    "公告日期": "2026-05-01",
+                    "报告期": "2025年报",
+                    "除权除息日期": "2026-06-05",
+                    "分红方案说明": "10派22.012元(含税)",
+                },
+                {
+                    "公告日期": "2026-03-01",
+                    "报告期": "2025中报",
+                    "除权除息日期": "2026-04-05",
+                    "分红方案说明": "10派1元(含税)",
+                },
+                {
+                    "公告日期": "2025-05-01",
+                    "报告期": "2024年报",
+                    "除权除息日期": "2025-06-05",
+                    "分红方案说明": "10派10元(含税)",
+                },
+                {
+                    "公告日期": "2024-05-01",
+                    "报告期": "2023年报",
+                    "除权除息日期": "2024-06-05",
+                    "分红方案说明": "暂不分配",
+                },
+            ],
+        }
+
+        StockMarketService._enrich_ths_dividend_section(section)
+
+        parsed = section["dividend_parse"]
+        assert parsed["raw_rows"][0]["分红方案说明"] == "10派22.012元(含税)"
+        assert "原数据" not in parsed["per_share_columns"]
+        assert "报告期" in parsed["per_share_columns"]
+        assert parsed["per_share_rows"][0]["公告日期"] == "2026-05-01"
+        assert parsed["per_share_rows"][0]["报告期"] == "2025年报"
+        assert parsed["per_share_rows"][0]["除权除息日"] == "2026-06-05"
+        assert parsed["per_share_rows"][0]["派息基准"] == "每10股"
+        assert parsed["per_share_rows"][0]["现金派息"] == 22.012
+        assert parsed["per_share_rows"][0]["每股派息"] == 2.2012
+        assert parsed["per_share_rows"][0]["解析状态"] == "已解析"
+        assert parsed["per_share_rows"][1]["每股派息"] == 0.1
+        assert parsed["per_share_rows"][2]["每股派息"] == 1.0
+        assert parsed["per_share_rows"][3]["每股派息"] is None
+        assert parsed["per_share_rows"][3]["解析状态"] == "未识别"
+        assert parsed["yearly_summary_columns"] == ["年份", "每股派息金额", "环比变化"]
+        assert parsed["yearly_summary_rows"][0] == {"年份": 2025, "每股派息金额": 2.3012, "环比变化": 130.12}
+        assert parsed["yearly_summary_rows"][1] == {"年份": 2024, "每股派息金额": 1.0, "环比变化": None}
+
     def test_cn_stock_details_returns_summary_records_and_sections(self, client, monkeypatch):
         from autocoin.services.stock_market_service import StockMarketService
 

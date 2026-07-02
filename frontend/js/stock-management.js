@@ -91,6 +91,7 @@ const StockManagement = {
             <th>当前收益率</th>
             <th>当前股价</th>
             <th>平均成本</th>
+            <th>每股派息(去年)</th>
           </tr>
         </thead>
         <tbody>
@@ -105,6 +106,12 @@ const StockManagement = {
       btn.addEventListener("click", (event) => {
         event.stopPropagation();
         StockManagement.openDetailsModal(btn.dataset.market, btn.dataset.stockId);
+      });
+    });
+    wrap.querySelectorAll("[data-stock-dividends]").forEach(btn => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        StockManagement.openDividendModal(btn.dataset.market, btn.dataset.stockId);
       });
     });
     wrap.querySelectorAll("[data-stock-page]").forEach(btn => {
@@ -137,6 +144,10 @@ const StockManagement = {
         <td class="${StockManagement.returnRateClass(item.current_return_rate)}">${StockManagement.formatPercent(item.current_return_rate)}</td>
         <td>${StockManagement.formatMoney(item.current_price, item.stock_currency)}${stale || pending}</td>
         <td>${StockManagement.formatMoney(item.stock_average_price, item.stock_currency, 2)}</td>
+        <td class="stock-dividend-cell">
+          <span>--</span>
+          <button class="btn btn-ghost stock-dividend-btn" type="button" data-stock-dividends data-market="${StockManagement.escape(item.stock_market)}" data-stock-id="${StockManagement.escape(item.stock_id)}">股息</button>
+        </td>
       </tr>
       ${expanded ? StockManagement.renderRecordsRow(item, page) : ""}
     `;
@@ -147,7 +158,7 @@ const StockManagement = {
     if (!pageData) {
       return `
         <tr class="stock-record-row">
-          <td colspan="11"><div class="loading">加载批次...</div></td>
+          <td colspan="12"><div class="loading">加载批次...</div></td>
         </tr>
       `;
     }
@@ -164,7 +175,7 @@ const StockManagement = {
     `).join("");
     return `
       <tr class="stock-record-row">
-        <td colspan="11">
+        <td colspan="12">
           <div class="stock-record-panel">
             <table>
               <thead>
@@ -429,6 +440,99 @@ const StockManagement = {
     StockManagement.loadDetails(overlay, market, stockId);
   },
 
+  openDividendModal(market, stockId) {
+    const existing = document.querySelector(".modal-overlay");
+    if (existing) existing.remove();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal-dialog modal-dialog-lg stock-details-modal stock-dividend-modal">
+        <div class="stock-details-header">
+          <div class="stock-details-title-block">
+            <div class="modal-title">股息分红</div>
+            <div class="stock-details-meta-row">
+              <div class="stock-details-subtitle">${StockManagement.escape(market)} · ${StockManagement.escape(stockId)}</div>
+              <span class="stock-details-updated-at" data-stock-dividend-updated>更新时间：--</span>
+            </div>
+          </div>
+          <div class="stock-details-actions">
+            <button class="btn btn-ghost stock-details-close" type="button" aria-label="关闭">×</button>
+          </div>
+        </div>
+        <div class="stock-details-body" data-stock-dividend-body>
+          <div class="loading">正在查询同花顺分红数据...</div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-primary" type="button" data-stock-dividend-close>关闭</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector(".stock-details-close").addEventListener("click", close);
+    overlay.querySelector("[data-stock-dividend-close]").addEventListener("click", close);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) close();
+    });
+    StockManagement.loadDividendDetails(overlay, market, stockId);
+  },
+
+  async loadDividendDetails(overlay, market, stockId) {
+    const body = overlay.querySelector("[data-stock-dividend-body]");
+    try {
+      const data = await API.stockManagement.details(market, stockId);
+      const updatedEl = overlay.querySelector("[data-stock-dividend-updated]");
+      if (updatedEl) updatedEl.textContent = `更新时间：${StockManagement.formatDateTime(data.updated_at) || "--"}`;
+      body.innerHTML = StockManagement.renderDividendDetails(data);
+    } catch (err) {
+      body.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
+    }
+  },
+
+  renderDividendDetails(data) {
+    const sections = data.external_sections || [];
+    const thsSection = sections.find(section => section.source === "akshare.stock_fhps_detail_ths");
+    if (!thsSection) {
+      return `<div class="empty">暂无同花顺分红数据</div>`;
+    }
+    if (thsSection.status === "error") {
+      return `<div class="empty" style="color:var(--expense)">同花顺分红数据查询失败：${StockManagement.escape(thsSection.error || "未知错误")}</div>`;
+    }
+    const parsed = thsSection.dividend_parse || {};
+    const rawRows = parsed.raw_rows || thsSection.rows || [];
+    const rawColumns = parsed.raw_columns || thsSection.columns || [];
+    const yearlyRows = parsed.yearly_summary_rows || [];
+    const yearlyColumns = parsed.yearly_summary_columns || ["年份", "每股派息金额"];
+    const perShareRows = parsed.per_share_rows || [];
+    const perShareColumns = parsed.per_share_columns || [];
+    return `
+      <section class="stock-details-section">
+        <div class="stock-dividend-overview">
+          <div class="stock-dividend-summary">
+            <span>原数据</span>
+            <strong>${StockManagement.formatNumber(rawRows.length)} 条</strong>
+          </div>
+          <div class="stock-dividend-summary">
+            <span>每股派息</span>
+            <strong>${StockManagement.formatNumber(perShareRows.filter(row => row["每股派息"] !== null && row["每股派息"] !== undefined).length)} 条可解析</strong>
+          </div>
+        </div>
+      </section>
+      <section class="stock-details-section">
+        <div class="stock-details-section-title">最近5年每股派息汇总</div>
+        ${StockManagement.renderDetailsTable(yearlyColumns, yearlyRows)}
+      </section>
+      <section class="stock-details-section">
+        <div class="stock-details-section-title">每股派息数据</div>
+        ${StockManagement.renderDetailsTable(perShareColumns, perShareRows)}
+      </section>
+      <section class="stock-details-section">
+        <div class="stock-details-section-title">原数据</div>
+        ${StockManagement.renderDetailsTable(rawColumns, rawRows)}
+      </section>
+    `;
+  },
+
   async loadDetails(overlay, market, stockId, forceRefresh = false) {
     const body = overlay.querySelector(".stock-details-body");
     const refreshBtn = overlay.querySelector("[data-stock-details-refresh]");
@@ -548,13 +652,21 @@ const StockManagement = {
           <tbody>
             ${rows.map(row => `
               <tr>
-                ${safeColumns.map(col => `<td>${StockManagement.escape(StockManagement.formatDetailValue(row[col]))}</td>`).join("")}
+                ${safeColumns.map(col => StockManagement.renderDetailsTableCell(col, row[col])).join("")}
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
     `;
+  },
+
+  renderDetailsTableCell(column, value) {
+    if (column === "环比变化") {
+      const cellClass = StockManagement.returnRateClass(value);
+      return `<td class="${cellClass}">${StockManagement.escape(StockManagement.formatPercent(value))}</td>`;
+    }
+    return `<td>${StockManagement.escape(StockManagement.formatDetailValue(value))}</td>`;
   },
 
   objectRows(obj) {

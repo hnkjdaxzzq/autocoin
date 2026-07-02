@@ -361,6 +361,24 @@ body {
   white-space: nowrap;
 }
 
+.stock-dividend-cell {
+  min-width: 128px;
+  white-space: nowrap;
+}
+
+.stock-dividend-cell span {
+  display: inline-block;
+  min-width: 28px;
+  color: var(--text-muted);
+}
+
+.stock-dividend-btn {
+  margin-left: 8px;
+  padding: 5px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .stock-expand-col {
   width: 34px;
   padding-left: 10px;
@@ -611,6 +629,35 @@ body {
   min-width: 120px;
   max-width: 320px;
   overflow-wrap: anywhere;
+}
+
+.stock-dividend-modal {
+  width: min(1180px, 92vw);
+}
+
+.stock-dividend-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.stock-dividend-summary {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--table-head-bg);
+  padding: 12px 14px;
+}
+
+.stock-dividend-summary span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.stock-dividend-summary strong {
+  color: var(--text);
+  font-size: 16px;
 }
 
 .stock-form-grid {
