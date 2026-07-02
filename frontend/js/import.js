@@ -1260,7 +1260,7 @@ const Import = {
               <td style="color:#22c55e">${b.imported_rows}</td>
               <td style="color:#f59e0b">${b.duplicate_rows}</td>
               <td>
-                <span class="badge ${b.status === 'success' ? 'badge-income' : b.status === 'failed' ? 'badge-expense' : 'badge-neutral'}">
+                <span class="badge ${b.status === 'success' ? 'badge-success' : b.status === 'failed' ? 'badge-danger' : 'badge-neutral'}">
                   ${b.status}
                 </span>
               </td>

@@ -68,7 +68,7 @@ const StockManagement = {
       if (background) {
         showToast(`刷新股票数据失败：${err.message}`);
       } else {
-        wrap.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
+        wrap.innerHTML = `<div class="empty" style="color:var(--danger)">加载失败：${StockManagement.escape(err.message)}</div>`;
       }
     }
   },
@@ -548,12 +548,12 @@ const StockManagement = {
       StockManagement.renderLookupName(overlay, data.stock_name || "--");
       if (data.stock_alias) aliasEl.value = data.stock_alias;
       hintEl.textContent = `已查询到实时价：${StockManagement.formatMoney(data.current_price, data.stock_currency)}${data.from_cache ? "（缓存）" : ""}`;
-      hintEl.style.color = "var(--income)";
+      hintEl.style.color = "var(--success)";
     } catch (err) {
       StockManagement._state.latestLookup = null;
       StockManagement.renderLookupName(overlay, "查询失败");
       hintEl.textContent = `查询失败：${err.message}。仍可保存该记录。`;
-      hintEl.style.color = "var(--expense)";
+      hintEl.style.color = "var(--danger)";
     }
   },
 
@@ -613,7 +613,7 @@ const StockManagement = {
     } catch (err) {
       const hintEl = overlay.querySelector("#stock-lookup-hint");
       hintEl.textContent = `保存失败：${err.message}`;
-      hintEl.style.color = "var(--expense)";
+      hintEl.style.color = "var(--danger)";
     }
   },
 
@@ -761,7 +761,7 @@ const StockManagement = {
       if (updatedEl) updatedEl.textContent = `更新时间：${StockManagement.formatDateTime(data.updated_at) || "--"}`;
       body.innerHTML = StockManagement.renderDividendDetails(data);
     } catch (err) {
-      body.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
+      body.innerHTML = `<div class="empty" style="color:var(--danger)">加载失败：${StockManagement.escape(err.message)}</div>`;
     }
   },
 
@@ -780,7 +780,7 @@ const StockManagement = {
       return `<div class="empty">暂无 Yahoo Finance 历史股息数据</div>`;
     }
     if (yahooSection.status === "error") {
-      return `<div class="empty" style="color:var(--expense)">Yahoo Finance 历史股息查询失败：${StockManagement.escape(yahooSection.error || "未知错误")}</div>`;
+      return `<div class="empty" style="color:var(--danger)">Yahoo Finance 历史股息查询失败：${StockManagement.escape(yahooSection.error || "未知错误")}</div>`;
     }
     const rows = StockManagement.normalizedUsDividendRows(yahooSection.rows || []);
     const columns = ["date", "dividend"];
@@ -868,7 +868,7 @@ const StockManagement = {
       return `<div class="empty">暂无同花顺分红数据</div>`;
     }
     if (thsSection.status === "error") {
-      return `<div class="empty" style="color:var(--expense)">同花顺分红数据查询失败：${StockManagement.escape(thsSection.error || "未知错误")}</div>`;
+      return `<div class="empty" style="color:var(--danger)">同花顺分红数据查询失败：${StockManagement.escape(thsSection.error || "未知错误")}</div>`;
     }
     const parsed = thsSection.dividend_parse || {};
     const rawRows = parsed.raw_rows || thsSection.rows || [];
@@ -918,7 +918,7 @@ const StockManagement = {
       if (updatedEl) updatedEl.textContent = `更新时间：${StockManagement.formatDateTime(data.updated_at) || "--"}`;
       body.innerHTML = StockManagement.renderDetails(data);
     } catch (err) {
-      body.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${StockManagement.escape(err.message)}</div>`;
+      body.innerHTML = `<div class="empty" style="color:var(--danger)">加载失败：${StockManagement.escape(err.message)}</div>`;
     } finally {
       if (refreshBtn) {
         refreshBtn.disabled = false;
@@ -1006,7 +1006,7 @@ const StockManagement = {
           <span class="stock-details-status ${section.status === "error" ? "error" : ""}">${section.status === "error" ? "失败" : "正常"}</span>
         </div>
         ${section.status === "error"
-          ? `<div class="empty" style="color:var(--expense)">${StockManagement.escape(section.error || "查询失败")}</div>`
+          ? `<div class="empty" style="color:var(--danger)">${StockManagement.escape(section.error || "查询失败")}</div>`
           : StockManagement.renderDetailsTable(section.columns || [], section.rows || [])}
       </section>
     `;

@@ -271,7 +271,7 @@ const AiClassification = {
         </div>
         <div id="ai-failure-details" style="display:none;margin-top:10px;padding:10px;
              border:1px solid rgba(239,68,68,.28);border-radius:var(--radius-sm);
-             background:rgba(239,68,68,.06);color:var(--expense);font-size:12px;line-height:1.5">
+             background:rgba(239,68,68,.06);color:var(--danger);font-size:12px;line-height:1.5">
         </div>
       </div>`;
 
@@ -431,17 +431,17 @@ const AiClassification = {
           </div>
           <div class="summary-card">
             <div class="label">已分类</div>
-            <div class="value" style="color:var(--income);font-size:22px">${completeData.classified}</div>
+            <div class="value" style="color:var(--success);font-size:22px">${completeData.classified}</div>
           </div>
           <div class="summary-card">
             <div class="label">分类改变</div>
-            <div class="value" style="color:var(--expense);font-size:22px">${completeData.changed}</div>
+            <div class="value" style="color:var(--danger);font-size:22px">${completeData.changed}</div>
           </div>
         </div>
         ${completeData.failed_batches > 0 ? `
           <div style="margin-top:12px;padding:12px;border:1px solid rgba(239,68,68,.28);
                       border-radius:var(--radius-sm);background:rgba(239,68,68,.06);
-                      color:var(--expense);font-size:13px;line-height:1.5">
+                      color:var(--danger);font-size:13px;line-height:1.5">
             <strong>${completeData.failed_batches} 批处理失败，失败批次已保留原分类。</strong>
             ${finalFailureDetails}
           </div>
@@ -454,7 +454,7 @@ const AiClassification = {
       const isTimeout = err.name === "AbortError";
       statusEl.innerHTML = `
         <div style="padding:16px;background:rgba(239,68,68,.08);border-radius:var(--radius-sm);
-                    color:var(--expense);font-weight:500">
+                    color:var(--danger);font-weight:500">
           ❌ ${isTimeout ? "请求超时：DeepSeek API 响应超过11分钟，请检查网络或 API key 是否正确" : "分类失败: " + err.message}
         </div>`;
     } finally {
@@ -554,14 +554,14 @@ const AiClassification = {
           ${completeData.failed_batches > 0 ? `
             <div style="margin-bottom:12px;padding:12px;border:1px solid rgba(239,68,68,.28);
                         border-radius:var(--radius-sm);background:rgba(239,68,68,.06);
-                        color:var(--expense);font-size:13px;line-height:1.5">
+                        color:var(--danger);font-size:13px;line-height:1.5">
               <strong>${completeData.failed_batches} 批处理失败，失败批次已保留原分类。</strong>
               ${AiClassification._failureDetailsHtml(completeData.failed_details, completeData.total_batches)}
             </div>
           ` : ""}
           <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted)">
             共 <strong style="color:var(--text)">${allResults.length}</strong> 条数据，
-            其中 <strong style="color:var(--expense)">${allResults.filter(r => r.old_category !== r.new_category).length}</strong> 条分类发生变更。
+            其中 <strong style="color:var(--danger)">${allResults.filter(r => r.old_category !== r.new_category).length}</strong> 条分类发生变更。
             每页展示 ${pageSize} 条。自定义分类留空时使用 AI 返回的新分类。
           </div>
           <div class="modal-body-content">
@@ -646,7 +646,7 @@ const AiClassification = {
       if (statusEl) {
         statusEl.innerHTML = `
           <div style="padding:16px;background:rgba(16,185,129,.08);border-radius:var(--radius-sm);
-                      color:var(--income);font-weight:500">
+                      color:var(--success);font-weight:500">
             ✅ 已成功更新 ${res.updated} 条数据
           </div>`;
       }

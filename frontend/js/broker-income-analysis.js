@@ -428,7 +428,7 @@ const BrokerIncomeAnalysis = {
 
       try {
         await API.transactions.create(body);
-        resultEl.innerHTML = `<span style="color:var(--income);font-size:13px">✅ 录入成功！</span>`;
+        resultEl.innerHTML = `<span style="color:var(--success);font-size:13px">✅ 录入成功！</span>`;
         // Reset form fields except time
         container.querySelector("#m-amount").value = "";
         container.querySelector("#m-category").value = "";
@@ -441,7 +441,7 @@ const BrokerIncomeAnalysis = {
         BrokerIncomeAnalysis._load(container);
         setTimeout(() => { resultEl.innerHTML = ""; }, 3000);
       } catch (err) {
-        resultEl.innerHTML = `<span style="color:var(--expense);font-size:13px">❌ ${err.message}</span>`;
+        resultEl.innerHTML = `<span style="color:var(--danger);font-size:13px">❌ ${err.message}</span>`;
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = "保存";
@@ -496,12 +496,12 @@ const BrokerIncomeAnalysis = {
           borderColor: "#4f6ef7",
           backgroundColor: "rgba(79,110,247,0.1)",
           fill: true,
-          pointBackgroundColor: months.map(m => m.net >= 0 ? "#22c55e" : "#ef4444"),
+          pointBackgroundColor: months.map(m => m.net >= 0 ? "#ef4444" : "#22c55e"),
         },
       ], BrokerIncomeAnalysis._chartValueOptions());
       Charts.createBar("broker-monthly-bar", container.querySelector("#broker-monthly-bar"), labels, [
-        { label: "支出", data: months.map(m => m.expense), backgroundColor: "rgba(239,68,68,0.75)" },
-        { label: "收入", data: months.map(m => m.income), backgroundColor: "rgba(34,197,94,0.75)" },
+        { label: "支出", data: months.map(m => m.expense), backgroundColor: "rgba(34,197,94,0.75)" },
+        { label: "收入", data: months.map(m => m.income), backgroundColor: "rgba(239,68,68,0.75)" },
       ], BrokerIncomeAnalysis._chartValueOptions());
       BrokerIncomeAnalysis._renderMonthlyTable(container, months);
     } catch (err) {
@@ -611,7 +611,7 @@ const BrokerIncomeAnalysis = {
       }
       wrap.innerHTML = `<canvas id="broker-product-bar"></canvas>`;
       Charts.createBar("broker-product-bar", container.querySelector("#broker-product-bar"), items.map(item => BrokerIncomeAnalysis._truncateLabel(item.label, 10)), [
-        { label: "收入金额", data: items.map(item => item.amount), backgroundColor: "rgba(79,110,247,0.75)" },
+        { label: "收入金额", data: items.map(item => item.amount), backgroundColor: "rgba(239,68,68,0.75)" },
       ], BrokerIncomeAnalysis._chartValueOptions({
         plugins: {
           legend: { position: "top" },

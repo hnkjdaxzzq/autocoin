@@ -165,7 +165,7 @@ function showChangePasswordModal() {
           <label class="form-label">确认新密码</label>
           <input type="password" id="cp-confirm-password" placeholder="请再次输入新密码">
         </div>
-        <div id="cp-error" class="field-hint" style="color:var(--expense);margin-top:8px"></div>
+        <div id="cp-error" class="field-hint" style="color:var(--danger);margin-top:8px"></div>
       </div>
       <div class="modal-buttons">
         <button class="btn btn-ghost" onclick="closeChangePasswordModal()">取消</button>

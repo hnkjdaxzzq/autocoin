@@ -8,8 +8,12 @@
   --primary: #4f6ef7;
   --primary-hover: #3b5bdb;
   --primary-light: #eef1ff;
-  --income: #10b981;
-  --expense: #ef4444;
+  --income: #ef4444;
+  --expense: #10b981;
+  --success: #10b981;
+  --danger: #ef4444;
+  --stock-return-positive: #ef4444;
+  --stock-return-negative: #10b981;
   --neutral: #94a3b8;
   --text: #1e293b;
   --text-muted: #64748b;
@@ -36,8 +40,12 @@
   --primary: #6d8cfc;
   --primary-hover: #5a7af5;
   --primary-light: #1e293b;
-  --income: #34d399;
-  --expense: #f87171;
+  --income: #f87171;
+  --expense: #34d399;
+  --success: #34d399;
+  --danger: #f87171;
+  --stock-return-positive: #f87171;
+  --stock-return-negative: #34d399;
   --neutral: #94a3b8;
   --text: #e2e8f0;
   --text-muted: #94a3b8;
@@ -559,7 +567,7 @@ body {
 }
 
 .stock-record-delete-btn {
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .stock-delete-modal {
@@ -578,7 +586,7 @@ body {
 }
 
 .stock-delete-code strong {
-  color: var(--expense);
+  color: var(--danger);
   font-size: 18px;
   letter-spacing: 0;
 }
@@ -609,19 +617,19 @@ body {
 }
 
 .stock-price-warning {
-  color: var(--expense);
+  color: var(--danger);
   font-size: 11px;
   font-weight: 500;
   margin-top: 4px;
 }
 
 .stock-return-positive {
-  color: var(--expense);
+  color: var(--stock-return-positive);
   font-weight: 700;
 }
 
 .stock-return-negative {
-  color: var(--income);
+  color: var(--stock-return-negative);
   font-weight: 700;
 }
 
@@ -809,7 +817,7 @@ body {
 
 .stock-details-status.error {
   background: rgba(239, 68, 68, .12);
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .stock-details-grid {
@@ -974,7 +982,7 @@ body {
 
 .required-mark,
 .required-text {
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .required-mark {
@@ -1330,12 +1338,12 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 }
 
 .tx-row-menu-item.danger {
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .tx-row-menu-item.danger:hover {
   background: rgba(239, 68, 68, .1);
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .tx-row-deleted td {
@@ -1359,8 +1367,10 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   letter-spacing: .02em;
 }
 
-.badge-income { background: #ecfdf5; color: #059669; }
-.badge-expense { background: #fef2f2; color: #dc2626; }
+.badge-income { background: #fef2f2; color: #dc2626; }
+.badge-expense { background: #ecfdf5; color: #059669; }
+.badge-success { background: #ecfdf5; color: #059669; }
+.badge-danger { background: #fef2f2; color: #dc2626; }
 .badge-neutral { background: #f1f5f9; color: #64748b; }
 
 .badge-old {
@@ -1635,9 +1645,9 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   color: var(--primary);
 }
 
-.import-result .stat .n.success { color: var(--income); }
+.import-result .stat .n.success { color: var(--success); }
 .import-result .stat .n.warn { color: #f59e0b; }
-.import-result .stat .n.danger { color: var(--expense); }
+.import-result .stat .n.danger { color: var(--danger); }
 .import-result .stat .l { font-size: 12px; color: var(--text-muted); }
 
 /* ===== Manual form ===== */
@@ -1959,7 +1969,7 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
 }
 
 .user-menu-logout {
-  color: var(--expense);
+  color: var(--danger);
 }
 
 .user-menu-divider {
@@ -2105,7 +2115,7 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   padding: 8px 0;
   border: none;
   background: none;
-  color: var(--expense);
+  color: var(--danger);
   font-size: 14px;
   cursor: pointer;
   text-align: left;
@@ -2610,10 +2620,10 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   border-left: 4px solid var(--border);
 }
 .import-notice-success {
-  border-left-color: var(--income);
+  border-left-color: var(--success);
 }
 .import-notice-error {
-  border-left-color: var(--expense);
+  border-left-color: var(--danger);
 }
 
 /* ===== Mobile responsive for image import ===== */
@@ -2708,8 +2718,8 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   padding: 2px 8px;
   border-radius: 4px;
 }
-.img-mobile-card-dir.expense { background: #fef2f2; color: var(--expense); }
-.img-mobile-card-dir.income { background: #f0fdf4; color: var(--income); }
+.img-mobile-card-dir.expense { background: #f0fdf4; color: var(--expense); }
+.img-mobile-card-dir.income { background: #fef2f2; color: var(--income); }
 .img-mobile-card-dir.neutral { background: #f8fafc; color: var(--neutral); }
 .img-mobile-card-amount {
   margin-left: auto;
@@ -2861,7 +2871,7 @@ tr:hover td { background: var(--table-hover-bg); transition: background .15s; }
   font-size: 14px;
 }
 .rules-error {
-  color: var(--expense);
+  color: var(--danger);
   font-size: 13px;
   margin-top: 10px;
   min-height: 18px;

@@ -146,12 +146,12 @@ const Dashboard = {
       {
         label: "支出",
         data: data.months.map(m => m.expense),
-        backgroundColor: "rgba(239,68,68,0.7)",
+        backgroundColor: "rgba(34,197,94,0.7)",
       },
       {
         label: "收入",
         data: data.months.map(m => m.income),
-        backgroundColor: "rgba(34,197,94,0.7)",
+        backgroundColor: "rgba(239,68,68,0.7)",
       },
     ]);
   },

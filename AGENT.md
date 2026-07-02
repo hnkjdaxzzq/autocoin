@@ -494,6 +494,7 @@ autocoin-t/
 ### 6.8 暗黑模式
 
 - CSS 自定义属性（`data-theme="dark"`），所有颜色变量切换
+- 财务颜色约定：`--income` 为收入红色，`--expense` 为支出绿色；操作状态使用 `--success` / `--danger`，股票收益使用股票专用收益色变量
 - 自动跟随系统偏好（`prefers-color-scheme`）
 - 选择持久化存储于 `localStorage`
 - 主题切换时自动刷新 Chart.js 图表颜色

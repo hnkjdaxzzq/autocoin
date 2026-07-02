@@ -347,7 +347,7 @@ const Transactions = {
 
       try {
         await API.transactions.create(body);
-        resultEl.innerHTML = `<span style="color:var(--income);font-size:13px">✅ 录入成功！</span>`;
+        resultEl.innerHTML = `<span style="color:var(--success);font-size:13px">✅ 录入成功！</span>`;
         // Reset form fields except time
         container.querySelector("#m-amount").value = "";
         container.querySelector("#m-category").value = "";
@@ -360,7 +360,7 @@ const Transactions = {
         Transactions._load(container);
         setTimeout(() => { resultEl.innerHTML = ""; }, 3000);
       } catch (err) {
-        resultEl.innerHTML = `<span style="color:var(--expense);font-size:13px">❌ ${err.message}</span>`;
+        resultEl.innerHTML = `<span style="color:var(--danger);font-size:13px">❌ ${err.message}</span>`;
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = "保存";

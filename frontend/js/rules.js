@@ -266,7 +266,7 @@ const RulesPage = {
         });
       });
     } catch (err) {
-      listEl.innerHTML = `<div class="empty" style="color:var(--expense)">加载失败：${err.message}</div>`;
+      listEl.innerHTML = `<div class="empty" style="color:var(--danger)">加载失败：${err.message}</div>`;
     }
   },
 

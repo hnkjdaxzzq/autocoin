@@ -68,7 +68,7 @@ const AuthPage = {
             <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;font-size:15px;justify-content:center">注册</button>
           </form>
 
-          <div id="auth-error" style="margin-top:14px;font-size:13px;color:var(--expense);text-align:center"></div>
+          <div id="auth-error" style="margin-top:14px;font-size:13px;color:var(--danger);text-align:center"></div>
         </div>
       </div>
     `;
@@ -101,7 +101,7 @@ const AuthPage = {
   _setHint(el, msg) {
     if (!el) return;
     el.textContent = msg;
-    el.style.color = msg ? "var(--expense)" : "var(--income)";
+    el.style.color = msg ? "var(--danger)" : "var(--success)";
   },
 
   _bindRealtimeValidation(container) {

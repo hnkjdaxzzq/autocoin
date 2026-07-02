@@ -158,8 +158,8 @@ const Stats = {
     const labels = data.months.map(m => `${m.month}月`);
 
     Charts.createBar("stat-monthly", container.querySelector("#stat-monthly-bar"), labels, [
-      { label: "支出", data: data.months.map(m => m.expense), backgroundColor: "rgba(239,68,68,0.75)" },
-      { label: "收入", data: data.months.map(m => m.income), backgroundColor: "rgba(34,197,94,0.75)" },
+      { label: "支出", data: data.months.map(m => m.expense), backgroundColor: "rgba(34,197,94,0.75)" },
+      { label: "收入", data: data.months.map(m => m.income), backgroundColor: "rgba(239,68,68,0.75)" },
     ]);
 
     Charts.createLine("stat-net", container.querySelector("#stat-net-line"), labels, [
@@ -169,7 +169,7 @@ const Stats = {
         borderColor: "#4f6ef7",
         backgroundColor: "rgba(79,110,247,0.1)",
         fill: true,
-        pointBackgroundColor: data.months.map(m => m.net >= 0 ? "#22c55e" : "#ef4444"),
+        pointBackgroundColor: data.months.map(m => m.net >= 0 ? "#ef4444" : "#22c55e"),
       },
     ]);
   },
@@ -398,7 +398,7 @@ const Stats = {
       if (prev) prev.addEventListener("click", (e) => { e.stopPropagation(); Stats._loadCategoryDetail(el, category, idx, page - 1); });
       if (next) next.addEventListener("click", (e) => { e.stopPropagation(); Stats._loadCategoryDetail(el, category, idx, page + 1); });
     } catch (err) {
-      wrap.innerHTML = `<div style="padding:16px;color:var(--expense);font-size:13px">加载失败: ${err.message}</div>`;
+      wrap.innerHTML = `<div style="padding:16px;color:var(--danger);font-size:13px">加载失败: ${err.message}</div>`;
     }
   },
 };
