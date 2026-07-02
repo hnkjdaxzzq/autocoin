@@ -604,7 +604,7 @@ class StockMarketService:
         previous_count = previous.get("派息次数") or 0
         if latest_count >= previous_count:
             return latest
-        return rows[2] if len(rows) >= 3 else None
+        return previous
 
     @staticmethod
     def _year_from_report_period(value) -> Optional[int]:

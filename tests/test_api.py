@@ -1780,13 +1780,15 @@ class TestStockManagement:
         from autocoin.services.stock_market_service import StockMarketService
 
         rows = [
-            {"年份": 2026, "派息次数": 1, "每股派息金额": 0.2},
-            {"年份": 2025, "派息次数": 2, "每股派息金额": 2.3},
-            {"年份": 2024, "派息次数": 2, "每股派息金额": 1.0},
+            {"年份": 2026, "派息次数": 6, "每股派息金额": 1.247},
+            {"年份": 2025, "派息次数": 12, "每股派息金额": 1.933},
+            {"年份": 2024, "派息次数": 12, "每股派息金额": 1.646},
         ]
-        assert StockMarketService._select_dividend_summary_row(rows)["年份"] == 2024
+        selected = StockMarketService._select_dividend_summary_row(rows)
+        assert selected["年份"] == 2025
+        assert selected["每股派息金额"] == 1.933
 
-        rows[0]["派息次数"] = 2
+        rows[0]["派息次数"] = 12
         assert StockMarketService._select_dividend_summary_row(rows)["年份"] == 2026
 
     def test_cn_stock_details_returns_summary_records_and_sections(self, client, monkeypatch):
