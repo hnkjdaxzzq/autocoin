@@ -179,6 +179,118 @@ def _summary_item_for_stock(
     }
 
 
+def _num(value) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _portfolio_metric_row(currency: str, items: list[dict], rate: float = 1.0, rate_error: Optional[str] = None) -> dict:
+    asset_value_pending = any(item.get("price_refresh_needed") for item in items)
+    dividend_pending = any(item.get("stock_dividend_refresh_needed") for item in items)
+    asset_value_missing = any(_num(item.get("total_value")) is None for item in items)
+    dividend_missing = any(_num(item.get("stock_dividend_per_share_last_year")) is None for item in items)
+    total_value = sum((_num(item.get("total_value")) or 0) * rate for item in items)
+    total_cost = sum((_num(item.get("total_cost")) or 0) * rate for item in items)
+    annual_dividend = sum(
+        ((_num(item.get("stock_dividend_per_share_last_year")) or 0) * (_num(item.get("stock_amount")) or 0) * rate)
+        for item in items
+    )
+    principal_return_rate = None
+    if total_cost and not asset_value_pending and not asset_value_missing:
+        principal_return_rate = (total_value - total_cost) / total_cost * 100
+    holding_dividend_rate = None
+    if total_cost and not dividend_pending and not dividend_missing:
+        holding_dividend_rate = annual_dividend / total_cost * 100
+    return {
+        "currency": currency,
+        "asset_total_value": None if asset_value_pending or asset_value_missing or rate_error else round(total_value, 2),
+        "holding_total_cost": None if rate_error else round(total_cost, 2),
+        "principal_return_rate": None if principal_return_rate is None or rate_error else round(principal_return_rate, 1),
+        "annual_dividend": None if dividend_pending or dividend_missing or rate_error else round(annual_dividend, 2),
+        "holding_dividend_rate": None if holding_dividend_rate is None or rate_error else round(holding_dividend_rate, 1),
+        "asset_value_pending": asset_value_pending,
+        "dividend_pending": dividend_pending,
+        "exchange_rate_to_cny": round(rate, 6) if rate and not rate_error else None,
+        "exchange_rate_error": rate_error,
+    }
+
+
+def _portfolio_summary(items: list[dict], service: StockMarketService) -> dict:
+    if not items:
+        return {"rows": [], "converted_total": None}
+
+    by_currency: dict[str, list[dict]] = {}
+    for item in items:
+        currency = item.get("stock_currency") or currency_for_market(item.get("stock_market", "CN"))
+        by_currency.setdefault(currency, []).append(item)
+
+    rows = [
+        _portfolio_metric_row(currency, currency_items)
+        for currency, currency_items in sorted(by_currency.items())
+    ]
+
+    rates: dict[str, float] = {}
+    rate_errors: dict[str, str] = {}
+    for currency in by_currency:
+        try:
+            rates[currency] = service.cny_rate(currency)
+        except Exception as exc:
+            rates[currency] = 0
+            rate_errors[currency] = str(exc)
+    for row in rows:
+        currency = row.get("currency")
+        if currency in rates and not rate_errors.get(currency):
+            row["exchange_rate_to_cny"] = round(rates[currency], 6)
+        if currency in rate_errors:
+            row["exchange_rate_error"] = rate_errors[currency]
+
+    converted_items = [item for item in items if not rate_errors.get(item.get("stock_currency") or currency_for_market(item.get("stock_market", "CN")))]
+    converted_row = _portfolio_metric_row(
+        "CNY",
+        converted_items,
+        rate=1.0,
+        rate_error="；".join(f"{currency}: {error}" for currency, error in sorted(rate_errors.items())) or None,
+    )
+    if not rate_errors:
+        converted_row = {
+            **converted_row,
+            "asset_total_value": None,
+            "holding_total_cost": None,
+            "principal_return_rate": None,
+            "annual_dividend": None,
+            "holding_dividend_rate": None,
+        }
+        converted_values = []
+        for currency, currency_items in by_currency.items():
+            rate = rates.get(currency, 1.0)
+            converted_values.append(_portfolio_metric_row("CNY", currency_items, rate=rate))
+        converted_row["asset_value_pending"] = any(row["asset_value_pending"] for row in converted_values)
+        converted_row["dividend_pending"] = any(row["dividend_pending"] for row in converted_values)
+        asset_value_missing = any(row["asset_total_value"] is None for row in converted_values)
+        dividend_missing = any(row["annual_dividend"] is None for row in converted_values)
+        converted_row["asset_total_value"] = None if converted_row["asset_value_pending"] or asset_value_missing else round(sum(row["asset_total_value"] or 0 for row in converted_values), 2)
+        converted_row["holding_total_cost"] = round(sum(row["holding_total_cost"] or 0 for row in converted_values), 2)
+        converted_row["annual_dividend"] = None if converted_row["dividend_pending"] or dividend_missing else round(sum(row["annual_dividend"] or 0 for row in converted_values), 2)
+        if converted_row["holding_total_cost"] and not converted_row["asset_value_pending"] and not asset_value_missing:
+            converted_row["principal_return_rate"] = round(
+                (converted_row["asset_total_value"] - converted_row["holding_total_cost"]) / converted_row["holding_total_cost"] * 100,
+                1,
+            )
+        if converted_row["holding_total_cost"] and not converted_row["dividend_pending"] and not dividend_missing:
+            converted_row["holding_dividend_rate"] = round(
+                converted_row["annual_dividend"] / converted_row["holding_total_cost"] * 100,
+                1,
+            )
+    converted_row["label"] = "CNY 汇总"
+    converted_row["is_converted"] = True
+    return {"rows": rows, "converted_total": converted_row}
+
+
 @router.get("/lookup")
 def lookup_stock(
     stock_market: str = Query("CN"),
@@ -303,7 +415,7 @@ def stock_summary(
         if item:
             items.append(item)
     db.commit()
-    return {"items": items}
+    return {"items": items, "portfolio_summary": _portfolio_summary(items, service)}
 
 
 @router.get("/stocks/{stock_market}/{stock_id}/details")

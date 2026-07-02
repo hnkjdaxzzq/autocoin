@@ -1568,6 +1568,13 @@ class TestStockManagement:
         assert item["current_return_rate"] == 194.1
         assert item["current_price"] == 20.0
         assert item["stock_average_price"] == 6.8
+        portfolio = summary_resp.json()["portfolio_summary"]
+        assert portfolio["rows"][0]["currency"] == "CNY"
+        assert portfolio["rows"][0]["asset_total_value"] == 300
+        assert portfolio["rows"][0]["holding_total_cost"] == 102
+        assert portfolio["rows"][0]["principal_return_rate"] == 194.1
+        assert portfolio["converted_total"]["label"] == "CNY 汇总"
+        assert portfolio["converted_total"]["asset_total_value"] == 300
 
         records_resp = client.get("/api/v1/stock-management/stocks/CN/600519/records?page=1", headers=headers)
         assert records_resp.status_code == 200
@@ -1577,6 +1584,59 @@ class TestStockManagement:
         assert records["total_pages"] == 2
         assert len(records["items"]) == 5
         assert {record["stock_alias"] for record in records["items"]} == {"茅台"}
+
+    def test_stock_summary_portfolio_groups_currency_and_converts_to_cny(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            prices = {"600777": 12.0, "JEPI": 55.0}
+            return {"stock_name": stock_id, "current_price": prices[stock_id]}
+
+        def fake_dividend_selection(self, market, stock_id):
+            dividends = {"600777": 0.5, "JEPI": 4.0}
+            return {"年份": 2025, "派息次数": 2, "每股派息金额": dividends[stock_id], "环比变化": 0}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "cached_dividend_selection", fake_dividend_selection)
+        monkeypatch.setattr(StockMarketService, "cny_rate", lambda self, currency: {"CNY": 1.0, "USD": 7.2}[currency])
+        headers = self._register_headers(client, "stockportfoliosummary")
+
+        cn_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600777",
+            "stock_amount": 10,
+            "stock_average_price": 10,
+        })
+        us_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "US",
+            "stock_id": "JEPI",
+            "stock_amount": 2,
+            "stock_average_price": 50,
+        })
+        assert cn_resp.status_code == 201
+        assert us_resp.status_code == 201
+
+        resp = client.get("/api/v1/stock-management/stocks/summary", headers=headers)
+
+        assert resp.status_code == 200
+        portfolio = resp.json()["portfolio_summary"]
+        rows = {row["currency"]: row for row in portfolio["rows"]}
+        assert rows["CNY"]["asset_total_value"] == 120
+        assert rows["CNY"]["holding_total_cost"] == 100
+        assert rows["CNY"]["principal_return_rate"] == 20.0
+        assert rows["CNY"]["annual_dividend"] == 5
+        assert rows["CNY"]["holding_dividend_rate"] == 5.0
+        assert rows["USD"]["asset_total_value"] == 110
+        assert rows["USD"]["holding_total_cost"] == 100
+        assert rows["USD"]["annual_dividend"] == 8
+        total = portfolio["converted_total"]
+        assert total["currency"] == "CNY"
+        assert total["is_converted"] is True
+        assert total["asset_total_value"] == 912
+        assert total["holding_total_cost"] == 820
+        assert total["principal_return_rate"] == 11.2
+        assert total["annual_dividend"] == 62.6
+        assert total["holding_dividend_rate"] == 7.6
 
     def test_lookup_uses_existing_schema_without_id_column(self, client, monkeypatch):
         from autocoin.services.stock_market_service import StockMarketService
@@ -1922,6 +1982,10 @@ class TestStockManagement:
         assert item["total_value"] is None
         assert item["current_return_rate"] is None
         assert item["lookup_error"] is None
+        portfolio = summary_resp.json()["portfolio_summary"]
+        assert portfolio["rows"][0]["asset_value_pending"] is True
+        assert portfolio["rows"][0]["asset_total_value"] is None
+        assert portfolio["rows"][0]["principal_return_rate"] is None
 
         refresh_resp = client.get("/api/v1/stock-management/stocks/summary?refresh_prices=true", headers=headers)
         assert refresh_resp.status_code == 200
@@ -1964,6 +2028,10 @@ class TestStockManagement:
         assert calls["dividends"] == 0
         assert item["stock_dividend_per_share_last_year"] is None
         assert item["stock_dividend_refresh_needed"] is True
+        portfolio = summary_resp.json()["portfolio_summary"]
+        assert portfolio["rows"][0]["dividend_pending"] is True
+        assert portfolio["rows"][0]["annual_dividend"] is None
+        assert portfolio["rows"][0]["holding_dividend_rate"] is None
 
         refresh_resp = client.get("/api/v1/stock-management/stocks/summary?refresh_dividends=true", headers=headers)
         assert refresh_resp.status_code == 200

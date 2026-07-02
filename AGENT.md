@@ -379,7 +379,7 @@ autocoin-t/
 |------|------|------|
 | GET | `/stock-management/lookup` | 查询股票名称、实时价和已有别名，行情缓存 TTL 3 小时 |
 | POST | `/stock-management/stocks` | 新增股票批次记录；查询行情失败仍允许保存；平均成本为空时优先取当前价 |
-| GET | `/stock-management/stocks/summary` | 按用户、市场、股票代码聚合资产；返回当前总价值、总成本、当前收益率、当前股价 |
+| GET | `/stock-management/stocks/summary` | 按用户、市场、股票代码聚合资产；返回资产列表和按币种/CNY 折算的组合统计 |
 | GET | `/stock-management/stocks/{stock_market}/{stock_id}/records` | 查询某只股票批次明细，最多每页 5 条 |
 
 ### 5.9 数据管理 `/data-management`（新增）
@@ -471,7 +471,7 @@ autocoin-t/
 | `#/dashboard` | 概览 | 摘要卡片 + 月度柱状图 + 分类环形图 + 近期交易 |
 | `#/transactions` | 账单明细 | 筛选/搜索/分页/行内编辑/批量操作/导出 |
 | `#/broker-income-analysis` | 券商收入分析 | 来源筛选 + 4 个图表 + 导出 |
-| `#/stock-management` | 股票详情 | 股票批次录入 + 资产聚合（当前总价值/总成本/收益率/当前股价）+ 明细展开分页 |
+| `#/stock-management` | 股票详情 | 股票批次录入 + 资产聚合 + 按币种/CNY 折算组合统计 + 明细展开分页 |
 | `#/import` | 导入 | 文件导入 + 图片导入 + 券商导入快捷键 |
 | `#/rules` | 规则 | 分类规则 + 别名规则双标签，带差异对比对话框 |
 | `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细 |

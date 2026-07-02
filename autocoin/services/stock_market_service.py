@@ -3,6 +3,8 @@ import math
 import re
 from datetime import date, datetime, timedelta
 from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from sqlalchemy.orm import Session
@@ -76,6 +78,33 @@ class StockMarketService:
         data["from_cache"] = True
         data["cache_stale"] = is_stale
         return data
+
+    def cny_rate(self, currency: str) -> float:
+        normalized = (currency or "CNY").strip().upper()
+        if normalized in ("CNY", "CNH"):
+            return 1.0
+        now = datetime.utcnow()
+        cached = self._get_cached_query_payload("FX", normalized, "rate:CNY", now=now)
+        if cached and cached.get("rate") is not None:
+            return float(cached["rate"])
+
+        params = urlencode({"base": normalized, "symbols": "CNY"})
+        url = f"https://api.frankfurter.dev/v1/latest?{params}"
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "AutoCoin/0.1 (+https://github.com/autocoin)",
+            },
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            rate = float(payload["rates"]["CNY"])
+        except (HTTPError, URLError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise StockLookupError(f"获取 {normalized} 到 CNY 汇率失败: {exc}") from exc
+        self._set_query_cache("FX", normalized, "rate:CNY", {"currency": normalized, "target": "CNY", "rate": rate}, now=now)
+        return rate
 
     def cleanup_expired_cache(self, now: Optional[datetime] = None) -> int:
         cutoff = (now or datetime.utcnow()) - STOCK_CACHE_TTL

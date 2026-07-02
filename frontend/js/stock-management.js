@@ -1,6 +1,7 @@
 const StockManagement = {
   _state: {
     items: [],
+    portfolioSummary: null,
     expandedKey: null,
     recordPages: {},
     lookupTimer: null,
@@ -30,6 +31,7 @@ const StockManagement = {
           刷新
         </button>
       </div>
+      <div id="stock-portfolio-summary"></div>
       <div class="table-wrap" id="stock-table-wrap"></div>
     `;
     container.querySelector("#btn-new-stock").addEventListener("click", () => StockManagement.openModal(container));
@@ -50,6 +52,7 @@ const StockManagement = {
         refresh_dividends: refreshDividends ? "true" : "false",
       });
       StockManagement._state.items = data.items || [];
+      StockManagement._state.portfolioSummary = data.portfolio_summary || null;
       StockManagement.renderTable(container);
       if (!refreshPrices && !refreshDividends && !background) {
         StockManagement.refreshSummaryIfNeeded(container);
@@ -75,6 +78,7 @@ const StockManagement = {
   },
 
   renderTable(container) {
+    StockManagement.renderPortfolioSummary(container);
     const wrap = container.querySelector("#stock-table-wrap");
     const items = StockManagement._state.items;
     if (!items.length) {
@@ -130,6 +134,80 @@ const StockManagement = {
     });
   },
 
+  renderPortfolioSummary(container) {
+    const el = container.querySelector("#stock-portfolio-summary");
+    if (!el) return;
+    const summary = StockManagement._state.portfolioSummary;
+    const rows = [
+      ...((summary && summary.rows) || []),
+      ...((summary && summary.converted_total) ? [summary.converted_total] : []),
+    ];
+    if (!rows.length) {
+      el.innerHTML = "";
+      return;
+    }
+    el.innerHTML = `
+      <div class="stock-portfolio-summary">
+        <table class="stock-portfolio-table">
+          <thead>
+            <tr>
+              <th>币种</th>
+              <th>资产总价值</th>
+              <th>持仓总成本</th>
+              <th>本金收益率</th>
+              <th>持仓股息率</th>
+              <th>预计股息/年</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => StockManagement.renderPortfolioSummaryRow(row)).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  },
+
+  renderPortfolioSummaryRow(row) {
+    const isConverted = row.is_converted === true;
+    const label = row.label || row.currency || "--";
+    const note = row.exchange_rate_error
+      ? `<div class="stock-price-warning">${StockManagement.escape(row.exchange_rate_error)}</div>`
+      : (isConverted ? StockManagement.renderExchangeRateNote() : "");
+    return `
+      <tr class="${isConverted ? "stock-portfolio-total-row" : ""}">
+        <td><strong>${StockManagement.escape(label)}</strong>${note}</td>
+        <td>${StockManagement.renderPortfolioValue(row.asset_total_value, row.currency, row.asset_value_pending)}</td>
+        <td>${StockManagement.renderPortfolioValue(row.holding_total_cost, row.currency, false)}</td>
+        <td class="${StockManagement.returnRateClass(row.principal_return_rate)}">${StockManagement.renderPortfolioPercent(row.principal_return_rate, row.asset_value_pending)}</td>
+        <td>${StockManagement.renderPortfolioPercent(row.holding_dividend_rate, row.dividend_pending)}</td>
+        <td>${StockManagement.renderPortfolioValue(row.annual_dividend, row.currency, row.dividend_pending)}</td>
+      </tr>
+    `;
+  },
+
+  renderExchangeRateNote() {
+    const summary = StockManagement._state.portfolioSummary || {};
+    const rows = summary.rows || [];
+    const notes = rows
+      .filter(row => row.currency && row.currency !== "CNY" && row.exchange_rate_to_cny)
+      .map(row => `${row.currency}=${Number(row.exchange_rate_to_cny).toFixed(4)}CNY`);
+    return notes.length ? `<div class="stock-portfolio-rate-note">${StockManagement.escape(notes.join("，"))}</div>` : "";
+  },
+
+  renderPortfolioValue(value, currency, loading) {
+    if (loading) return StockManagement.loadingDots();
+    return StockManagement.formatMoneyInteger(value, currency);
+  },
+
+  renderPortfolioPercent(value, loading) {
+    if (loading) return StockManagement.loadingDots();
+    return StockManagement.formatPercent(value);
+  },
+
+  loadingDots() {
+    return `<span class="stock-metric-loading" aria-label="加载中"><span></span><span></span><span></span></span>`;
+  },
+
   renderSummaryRows(item) {
     const key = StockManagement.itemKey(item);
     const expanded = StockManagement._state.expandedKey === key;
@@ -145,8 +223,8 @@ const StockManagement = {
         <td>${StockManagement.escape(item.stock_name || "--")}</td>
         <td>${StockManagement.escape(item.stock_alias || "--")}</td>
         <td>${StockManagement.formatNumber(item.stock_amount)}</td>
-        <td>${StockManagement.formatMoney(item.total_value, item.stock_currency)}</td>
-        <td>${StockManagement.formatMoney(item.total_cost, item.stock_currency)}</td>
+        <td>${StockManagement.formatMoneyInteger(item.total_value, item.stock_currency)}</td>
+        <td>${StockManagement.formatMoneyInteger(item.total_cost, item.stock_currency)}</td>
         <td class="${StockManagement.returnRateClass(item.current_return_rate)}">${StockManagement.formatPercent(item.current_return_rate)}</td>
         <td>${StockManagement.formatMoney(item.current_price, item.stock_currency)}${stale || pending}</td>
         <td>${StockManagement.formatMoney(item.stock_average_price, item.stock_currency, 2)}</td>
@@ -809,6 +887,12 @@ const StockManagement = {
     if (value === null || value === undefined) return "--";
     const symbol = currency === "USD" ? "$" : "¥";
     return `${symbol}${Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits })}`;
+  },
+
+  formatMoneyInteger(value, currency) {
+    if (value === null || value === undefined) return "--";
+    const symbol = currency === "USD" ? "$" : "¥";
+    return `${symbol}${Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
   },
 
   formatPercent(value) {
