@@ -7,6 +7,7 @@ const StockManagement = {
     lookupTimer: null,
     latestLookup: null,
     summaryRefreshInFlight: false,
+    summarySort: { key: "total_value", direction: "desc" },
   },
 
   render(container) {
@@ -18,20 +19,26 @@ const StockManagement = {
       </div>
 
       <div class="stock-action-band">
-        <button class="btn btn-primary" id="btn-new-stock" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          新增股票记录
-        </button>
+        <div class="page-title stock-section-title">操作</div>
+        <div class="stock-action-buttons">
+          <button class="btn btn-primary" id="btn-new-stock" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            新增股票记录
+          </button>
+          <button class="btn btn-ghost" id="btn-refresh-stocks" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            刷新数据
+          </button>
+        </div>
       </div>
 
       <div class="page-header stock-section-header">
-        <div class="page-title stock-section-title">现有资产</div>
-        <button class="btn btn-ghost" id="btn-refresh-stocks" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-          刷新
-        </button>
+        <div class="page-title stock-section-title">汇总统计</div>
       </div>
       <div id="stock-portfolio-summary"></div>
+      <div class="page-header stock-section-header stock-assets-header">
+        <div class="page-title stock-section-title">现有资产</div>
+      </div>
       <div class="table-wrap" id="stock-table-wrap"></div>
     `;
     container.querySelector("#btn-new-stock").addEventListener("click", () => StockManagement.openModal(container));
@@ -80,37 +87,28 @@ const StockManagement = {
   renderTable(container) {
     StockManagement.renderPortfolioSummary(container);
     const wrap = container.querySelector("#stock-table-wrap");
-    const items = StockManagement._state.items;
-    if (!items.length) {
-      wrap.innerHTML = `<div class="empty">暂无股票资产</div>`;
-      return;
-    }
+    const items = StockManagement.sortedSummaryItems();
     wrap.innerHTML = `
       <table class="stock-table">
         <thead>
           <tr>
             <th class="stock-expand-col"></th>
-            <th>股票代码</th>
-            <th>股票名称</th>
-            <th>别名</th>
-            <th>数量</th>
-            <th>当前总价值</th>
-            <th>总成本</th>
-            <th>当前收益率</th>
-            <th>当前股价</th>
-            <th>持仓成本</th>
-            <th>每股派息(去年)</th>
-            <th>环比变化</th>
-            <th>股息率</th>
-            <th>持仓股息率</th>
+            ${StockManagement.summarySortColumns().map(col => StockManagement.renderSortableHeader(col)).join("")}
             <th class="stock-detail-col">操作</th>
           </tr>
         </thead>
         <tbody>
-          ${items.map(item => StockManagement.renderSummaryRows(item)).join("")}
+          ${items.length ? items.map(item => StockManagement.renderSummaryRows(item)).join("") : StockManagement.renderEmptyTableRow(15)}
         </tbody>
       </table>
     `;
+    wrap.querySelectorAll("[data-stock-sort]").forEach(btn => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        StockManagement.toggleSummarySort(btn.dataset.stockSort);
+        StockManagement.renderTable(container);
+      });
+    });
     wrap.querySelectorAll(".stock-summary-row").forEach(row => {
       row.addEventListener("click", () => StockManagement.toggleRecords(container, row.dataset.key));
     });
@@ -132,6 +130,96 @@ const StockManagement = {
         StockManagement.loadRecords(container, btn.dataset.key, Number(btn.dataset.stockPage));
       });
     });
+    wrap.querySelectorAll("[data-stock-record-edit]").forEach(btn => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const record = StockManagement.findRecord(btn.dataset.stockVid);
+        if (record) StockManagement.openModal(container, { record });
+      });
+    });
+    wrap.querySelectorAll("[data-stock-record-delete]").forEach(btn => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const record = StockManagement.findRecord(btn.dataset.stockVid);
+        if (record) StockManagement.openDeleteConfirm(container, record);
+      });
+    });
+  },
+
+  summarySortColumns() {
+    return [
+      { key: "stock_code", label: "股票代码", type: "text" },
+      { key: "stock_name", label: "股票名称", type: "text" },
+      { key: "stock_alias", label: "别名", type: "text" },
+      { key: "stock_amount", label: "数量", type: "number" },
+      { key: "total_value", label: "当前总价值", type: "number" },
+      { key: "total_cost", label: "总成本", type: "number" },
+      { key: "current_return_rate", label: "当前收益率", type: "number" },
+      { key: "current_price", label: "当前股价", type: "number" },
+      { key: "stock_average_price", label: "持仓成本", type: "number" },
+      { key: "stock_dividend_per_share_last_year", label: "每股派息(去年)", type: "number" },
+      { key: "stock_dividend_change_rate", label: "环比变化", type: "number" },
+      { key: "dividend_rate", label: "股息率", type: "number" },
+      { key: "holding_dividend_rate", label: "持仓股息率", type: "number" },
+    ];
+  },
+
+  renderSortableHeader(column) {
+    const sort = StockManagement._state.summarySort;
+    const active = sort.key === column.key;
+    const icon = active ? (sort.direction === "asc" ? "▲" : "▼") : "↕";
+    return `
+      <th>
+        <button class="stock-sort-header ${active ? "active" : ""}" type="button" data-stock-sort="${StockManagement.escape(column.key)}">
+          <span>${StockManagement.escape(column.label)}</span>
+          <span class="stock-sort-icon">${icon}</span>
+        </button>
+      </th>
+    `;
+  },
+
+  toggleSummarySort(key) {
+    const current = StockManagement._state.summarySort;
+    if (current.key === key) {
+      current.direction = current.direction === "desc" ? "asc" : "desc";
+      return;
+    }
+    StockManagement._state.summarySort = { key, direction: "desc" };
+  },
+
+  sortedSummaryItems() {
+    const items = [...StockManagement._state.items];
+    const sort = StockManagement._state.summarySort;
+    const column = StockManagement.summarySortColumns().find(item => item.key === sort.key) || { key: "total_value", type: "number" };
+    return items.sort((left, right) => StockManagement.compareSummaryItems(left, right, column, sort.direction));
+  },
+
+  compareSummaryItems(left, right, column, direction) {
+    const leftValue = StockManagement.summarySortValue(left, column.key);
+    const rightValue = StockManagement.summarySortValue(right, column.key);
+    const leftEmpty = leftValue === null || leftValue === undefined || leftValue === "";
+    const rightEmpty = rightValue === null || rightValue === undefined || rightValue === "";
+    if (leftEmpty && rightEmpty) return 0;
+    if (leftEmpty) return 1;
+    if (rightEmpty) return -1;
+    let result;
+    if (column.type === "number") {
+      result = Number(leftValue) - Number(rightValue);
+    } else {
+      result = String(leftValue).localeCompare(String(rightValue), "zh-CN", { numeric: true, sensitivity: "base" });
+    }
+    return direction === "asc" ? result : -result;
+  },
+
+  summarySortValue(item, key) {
+    if (key === "stock_code") return `${item.stock_market || ""} ${item.stock_id || ""}`.trim();
+    if (key === "dividend_rate") {
+      return StockManagement.rateValue(item.stock_dividend_per_share_last_year, item.current_price);
+    }
+    if (key === "holding_dividend_rate") {
+      return StockManagement.rateValue(item.stock_dividend_per_share_last_year, item.stock_average_price);
+    }
+    return item[key];
   },
 
   renderPortfolioSummary(container) {
@@ -139,13 +227,9 @@ const StockManagement = {
     if (!el) return;
     const summary = StockManagement._state.portfolioSummary;
     const rows = [
-      ...((summary && summary.rows) || []),
       ...((summary && summary.converted_total) ? [summary.converted_total] : []),
+      ...((summary && summary.rows) || []),
     ];
-    if (!rows.length) {
-      el.innerHTML = "";
-      return;
-    }
     el.innerHTML = `
       <div class="stock-portfolio-summary">
         <table class="stock-portfolio-table">
@@ -160,7 +244,7 @@ const StockManagement = {
             </tr>
           </thead>
           <tbody>
-            ${rows.map(row => StockManagement.renderPortfolioSummaryRow(row)).join("")}
+            ${rows.length ? rows.map(row => StockManagement.renderPortfolioSummaryRow(row)).join("") : StockManagement.renderEmptyTableRow(6)}
           </tbody>
         </table>
       </div>
@@ -208,14 +292,23 @@ const StockManagement = {
     return `<span class="stock-metric-loading" aria-label="加载中"><span></span><span></span><span></span></span>`;
   },
 
+  inlineLoadingDots(label = "加载中") {
+    return `<span class="stock-inline-loading">${StockManagement.loadingDots().replace('aria-label="加载中"', `aria-label="${StockManagement.escape(label)}"`)}</span>`;
+  },
+
+  renderEmptyTableRow(colspan) {
+    return `<tr><td class="stock-empty-table-cell" colspan="${colspan}">当前无数据</td></tr>`;
+  },
+
   renderSummaryRows(item) {
     const key = StockManagement.itemKey(item);
     const expanded = StockManagement._state.expandedKey === key;
     const page = StockManagement._state.recordPages[key];
     const warning = item.lookup_error ? `<div class="stock-price-warning">${StockManagement.escape(item.lookup_error)}</div>` : "";
-    const stale = item.price_cache_stale ? `<div class="stock-price-warning">行情缓存已过期，正在后台刷新</div>` : "";
-    const pending = item.price_refresh_needed && !item.current_price ? `<div class="stock-price-warning">行情刷新中</div>` : "";
-    const dividendPending = item.stock_dividend_refresh_needed ? `<div class="stock-price-warning">股息刷新中</div>` : "";
+    const priceLoading = (item.price_cache_stale || (item.price_refresh_needed && !item.current_price))
+      ? StockManagement.inlineLoadingDots("行情刷新中")
+      : "";
+    const dividendLoading = item.stock_dividend_refresh_needed ? StockManagement.inlineLoadingDots("股息刷新中") : "";
     return `
       <tr class="stock-summary-row ${expanded ? "expanded" : ""}" data-key="${StockManagement.escape(key)}">
         <td class="stock-expand-col"><span class="stock-expand-arrow">${expanded ? "▼" : "▶"}</span></td>
@@ -226,11 +319,11 @@ const StockManagement = {
         <td>${StockManagement.formatMoneyInteger(item.total_value, item.stock_currency)}</td>
         <td>${StockManagement.formatMoneyInteger(item.total_cost, item.stock_currency)}</td>
         <td class="${StockManagement.returnRateClass(item.current_return_rate)}">${StockManagement.formatPercent(item.current_return_rate)}</td>
-        <td>${StockManagement.formatMoney(item.current_price, item.stock_currency)}${stale || pending}</td>
+        <td>${StockManagement.formatMoney(item.current_price, item.stock_currency)}${priceLoading}</td>
         <td>${StockManagement.formatMoney(item.stock_average_price, item.stock_currency, 2)}</td>
         <td class="stock-dividend-cell">
           <span title="${StockManagement.escape(StockManagement.dividendCellTitle(item))}">${StockManagement.formatMoney(item.stock_dividend_per_share_last_year, item.stock_currency, 2)}</span>
-          ${dividendPending}
+          ${dividendLoading}
         </td>
         <td class="${StockManagement.returnRateClass(item.stock_dividend_change_rate)}">${StockManagement.formatPercent(item.stock_dividend_change_rate)}</td>
         <td>${StockManagement.formatDividendRate(item.stock_dividend_per_share_last_year, item.current_price)}</td>
@@ -264,6 +357,12 @@ const StockManagement = {
         <td>${StockManagement.escape(record.stock_transaction_date || "--")}</td>
         <td>${StockManagement.escape(StockManagement.formatDateTime(record.stock_entry_time) || "--")}</td>
         <td>${StockManagement.escape(record.stock_remark || "--")}</td>
+        <td>
+          <div class="stock-row-actions">
+            <button class="btn btn-ghost stock-record-action-btn" type="button" data-stock-record-edit data-stock-vid="${StockManagement.escape(record.stock_vid)}">编辑</button>
+            <button class="btn btn-ghost stock-record-action-btn stock-record-delete-btn" type="button" data-stock-record-delete data-stock-vid="${StockManagement.escape(record.stock_vid)}">删除</button>
+          </div>
+        </td>
       </tr>
     `).join("");
     return `
@@ -280,9 +379,10 @@ const StockManagement = {
                   <th>成交日期</th>
                   <th>录入时间</th>
                   <th>备注</th>
+                  <th>操作</th>
                 </tr>
               </thead>
-              <tbody>${rows || `<tr><td colspan="7">暂无批次</td></tr>`}</tbody>
+              <tbody>${rows || `<tr><td colspan="8">暂无批次</td></tr>`}</tbody>
             </table>
             <div class="stock-record-pagination">
               <span>第 ${pageData.page} / ${pageData.total_pages || 1} 页，共 ${pageData.total} 条</span>
@@ -318,63 +418,82 @@ const StockManagement = {
     }
   },
 
-  openModal(container) {
+  findRecord(stockVid) {
+    for (const pageData of Object.values(StockManagement._state.recordPages)) {
+      const record = (pageData.items || []).find(item => item.stock_vid === stockVid);
+      if (record) return record;
+    }
+    return null;
+  },
+
+  openModal(container, options = {}) {
     const existing = document.querySelector(".modal-overlay");
     if (existing) existing.remove();
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
+    const record = options.record || null;
+    const isEdit = !!record;
     StockManagement._state.latestLookup = null;
+    if (record) {
+      StockManagement._state.latestLookup = {
+        current_price: record.stock_average_price,
+        stock_currency: record.stock_currency,
+        stock_name: record.stock_name,
+      };
+    }
+    overlay.dataset.mode = isEdit ? "edit" : "create";
+    overlay.dataset.stockVid = record ? record.stock_vid : "";
     overlay.innerHTML = `
       <div class="modal-dialog modal-dialog-lg stock-modal">
-        <div class="modal-title">新增股票记录</div>
+        <div class="modal-title">${isEdit ? "编辑股票记录" : "新增股票记录"}</div>
         <form id="stock-form">
           <div class="stock-form-grid">
             <div class="form-field stock-form-span2">
               <span class="form-label">所属市场</span>
               <div class="stock-market-options">
-                <label><input type="radio" name="stock_market" value="CN" checked> A股</label>
-                <label><input type="radio" name="stock_market" value="US"> 美股</label>
+                <label><input type="radio" name="stock_market" value="CN" ${!record || record.stock_market === "CN" ? "checked" : ""}> A股</label>
+                <label><input type="radio" name="stock_market" value="US" ${record && record.stock_market === "US" ? "checked" : ""}> 美股</label>
               </div>
             </div>
             <label class="form-field stock-code-field">
               <span class="form-label">股票代码 <span class="required-mark">*</span><span class="required-text">必填</span></span>
-              <input name="stock_id" id="stock-id" required placeholder="例如 600519 或 AAPL">
+              <input name="stock_id" id="stock-id" required placeholder="例如 600519 或 AAPL" value="${StockManagement.escape(record ? record.stock_id : "")}">
             </label>
             <div class="form-field stock-name-field">
               <span class="form-label stock-hidden-label">股票名称</span>
               <div class="stock-name-inline" id="stock-name-inline">
-                <span class="stock-name-placeholder">等待输入股票代码</span>
+                <span class="stock-name-placeholder">${StockManagement.escape(record ? (record.stock_name || "--") : "等待输入股票代码")}</span>
               </div>
             </div>
             <label class="form-field">
               <span class="form-label">别名</span>
-              <input name="stock_alias" id="stock-alias" placeholder="选填">
+              <input name="stock_alias" id="stock-alias" placeholder="选填" value="${StockManagement.escape(record ? (record.stock_alias || "") : "")}">
             </label>
             <label class="form-field">
               <span class="form-label">股票数量 <span class="required-mark">*</span><span class="required-text">必填</span></span>
-              <input name="stock_amount" type="number" min="0" step="0.000001" required>
+              <input name="stock_amount" type="number" min="0" step="0.000001" required value="${StockManagement.escape(record ? record.stock_amount : "")}">
             </label>
             <label class="form-field">
               <span class="form-label">平均成本</span>
               <div class="stock-money-input">
                 <span id="stock-currency-symbol">¥</span>
-                <input name="stock_average_price" type="number" min="0" step="0.0001" placeholder="请填写本批次平均成本">
+                <input name="stock_average_price" type="number" min="0" step="0.0001" placeholder="请填写本批次平均成本" value="${StockManagement.escape(record && record.stock_average_price !== null && record.stock_average_price !== undefined ? record.stock_average_price : "")}">
               </div>
             </label>
             <label class="form-field">
               <span class="form-label">成交日期(选填)</span>
-              <input name="stock_transaction_date" type="date">
+              <input name="stock_transaction_date" type="date" value="${StockManagement.escape(record ? (record.stock_transaction_date || "") : "")}">
             </label>
             <label class="form-field stock-form-span2">
               <span class="form-label">备注</span>
-              <input name="stock_remark" maxlength="50" placeholder="选填，最多50个汉字">
+              <input name="stock_remark" maxlength="50" placeholder="选填，最多50个汉字" value="${StockManagement.escape(record ? (record.stock_remark || "") : "")}">
             </label>
           </div>
-          <input type="hidden" name="stock_name" id="stock-name">
+          <input type="hidden" name="stock_name" id="stock-name" value="${StockManagement.escape(record ? (record.stock_name || "") : "")}">
           <div id="stock-lookup-hint" class="field-hint"></div>
           <div class="modal-buttons">
             <button class="btn btn-ghost" type="button" id="stock-cancel">取消</button>
-            <button class="btn btn-primary" type="submit">保存</button>
+            <button class="btn btn-primary" type="submit">${isEdit ? "保存修改" : "保存"}</button>
           </div>
         </form>
       </div>
@@ -387,6 +506,7 @@ const StockManagement = {
     const updateCurrency = () => {
       overlay.querySelector("#stock-currency-symbol").textContent = currentMarket() === "US" ? "$" : "¥";
     };
+    updateCurrency();
     marketEls.forEach(marketEl => marketEl.addEventListener("change", () => {
       updateCurrency();
       overlay.querySelector("#stock-name").value = "";
@@ -477,19 +597,81 @@ const StockManagement = {
       stock_remark: data.stock_remark,
     };
     try {
-      const result = await API.stockManagement.create(payload);
+      const isEdit = overlay.dataset.mode === "edit";
+      const stockVid = overlay.dataset.stockVid;
+      const result = isEdit
+        ? await API.stockManagement.update(stockVid, payload)
+        : await API.stockManagement.create(payload);
       overlay.remove();
       if (result.lookup_error) {
-        showToast(`已保存，行情查询失败：${result.lookup_error}`);
+        showToast(`${isEdit ? "已更新" : "已保存"}，行情查询失败：${result.lookup_error}`);
       } else {
-        showToast("股票记录已保存");
+        showToast(isEdit ? "股票记录已更新" : "股票记录已保存");
       }
-      await StockManagement.loadSummary(container);
+      await StockManagement.refreshAfterRecordChange(container);
     } catch (err) {
       const hintEl = overlay.querySelector("#stock-lookup-hint");
       hintEl.textContent = `保存失败：${err.message}`;
       hintEl.style.color = "var(--expense)";
     }
+  },
+
+  async refreshAfterRecordChange(container) {
+    const expandedKey = StockManagement._state.expandedKey;
+    const page = expandedKey ? ((StockManagement._state.recordPages[expandedKey] || {}).page || 1) : null;
+    await StockManagement.loadSummary(container, { showLoading: false });
+    const expandedItem = StockManagement._state.items.find(item => StockManagement.itemKey(item) === expandedKey);
+    if (expandedItem && page) {
+      await StockManagement.loadRecords(container, expandedKey, page);
+    }
+  },
+
+  openDeleteConfirm(container, record) {
+    const existing = document.querySelector(".modal-overlay");
+    if (existing) existing.remove();
+    const code = String(Math.floor(Math.random() * 900) + 100);
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal-dialog stock-delete-modal">
+        <div class="modal-title">删除股票资产</div>
+        <div class="stock-delete-message">该操作将删除本条股票资产，是否确认？</div>
+        <div class="stock-delete-code">请输入确认码 <strong>${code}</strong></div>
+        <input class="stock-delete-input" type="text" inputmode="numeric" maxlength="3" placeholder="输入3位数字确认">
+        <div class="modal-buttons">
+          <button class="btn btn-ghost" type="button" data-stock-delete-cancel>取消</button>
+          <button class="btn btn-primary" type="button" data-stock-delete-confirm disabled>确认删除</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector(".stock-delete-input");
+    const confirmBtn = overlay.querySelector("[data-stock-delete-confirm]");
+    const close = () => overlay.remove();
+    input.addEventListener("input", () => {
+      input.value = input.value.replace(/\D/g, "").slice(0, 3);
+      confirmBtn.disabled = input.value !== code;
+    });
+    overlay.querySelector("[data-stock-delete-cancel]").addEventListener("click", close);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) close();
+    });
+    confirmBtn.addEventListener("click", async () => {
+      if (input.value !== code) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "删除中";
+      try {
+        await API.stockManagement.delete(record.stock_vid);
+        close();
+        showToast("股票资产已删除");
+        await StockManagement.refreshAfterRecordChange(container);
+      } catch (err) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "确认删除";
+        showToast(`删除失败：${err.message}`);
+      }
+    });
+    setTimeout(() => input.focus(), 50);
   },
 
   openDetailsModal(market, stockId) {
@@ -903,6 +1085,11 @@ const StockManagement = {
   formatDividendRate(dividend, base) {
     if (dividend === null || dividend === undefined || base === null || base === undefined || Number(base) === 0) return "--";
     return StockManagement.formatPercent(Number(dividend) / Number(base) * 100);
+  },
+
+  rateValue(dividend, base) {
+    if (dividend === null || dividend === undefined || base === null || base === undefined || Number(base) === 0) return null;
+    return Number(dividend) / Number(base) * 100;
   },
 
   returnRateClass(value) {

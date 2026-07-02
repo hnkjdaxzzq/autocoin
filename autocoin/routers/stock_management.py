@@ -92,6 +92,42 @@ def _latest_alias(db: Session, user_id: int, market: str, stock_id: str) -> Opti
     return row[0] if row else None
 
 
+def _sync_stock_alias(db: Session, user_id: int, market: str, stock_id: str, alias: str, now: datetime) -> None:
+    (
+        db.query(StockData)
+        .filter(
+            StockData.user_id == user_id,
+            StockData.stock_market == market,
+            StockData.stock_id == stock_id,
+        )
+        .update(
+            {
+                "stock_alias": alias,
+                "updated_at": now,
+            },
+            synchronize_session=False,
+        )
+    )
+
+
+def _apply_stock_body(stock: StockData, body: StockCreate, lookup_info: Optional[dict], now: datetime) -> None:
+    average_price = body.stock_average_price
+    if average_price is None:
+        current_price = (lookup_info or {}).get("current_price")
+        if current_price is not None:
+            average_price = float(current_price)
+    stock.stock_market = body.stock_market
+    stock.stock_id = body.stock_id
+    stock.stock_name = body.stock_name or (lookup_info or {}).get("stock_name")
+    stock.stock_alias = body.stock_alias
+    stock.stock_amount = body.stock_amount
+    stock.stock_average_price = average_price
+    stock.stock_currency = currency_for_market(body.stock_market)
+    stock.stock_remark = body.stock_remark
+    stock.stock_transaction_date = datetime.combine(body.stock_transaction_date, datetime.min.time()) if body.stock_transaction_date else None
+    stock.updated_at = now
+
+
 def _summary_item_for_stock(
     db: Session,
     user_id: int,
@@ -323,47 +359,21 @@ def create_stock(
     code = body.stock_id
     lookup_info, lookup_error = StockMarketService(db).try_lookup(market, code)
     now = datetime.utcnow()
-    stock_name = body.stock_name or (lookup_info or {}).get("stock_name")
-    average_price = body.stock_average_price
-    if average_price is None:
-        current_price = (lookup_info or {}).get("current_price")
-        if current_price is not None:
-            average_price = float(current_price)
-    currency = currency_for_market(market)
     stock = StockData(
         stock_vid=_generate_stock_vid(db),
         user_id=user.id,
         stock_market=market,
         stock_id=code,
-        stock_name=stock_name,
-        stock_alias=body.stock_alias,
-        stock_amount=body.stock_amount,
-        stock_average_price=average_price,
-        stock_currency=currency,
-        stock_remark=body.stock_remark,
-        stock_transaction_date=datetime.combine(body.stock_transaction_date, datetime.min.time()) if body.stock_transaction_date else None,
+        stock_currency=currency_for_market(market),
         stock_entry_time=now,
         created_at=now,
         updated_at=now,
     )
     db.add(stock)
+    _apply_stock_body(stock, body, lookup_info, now)
     db.flush()
     if body.stock_alias:
-        (
-            db.query(StockData)
-            .filter(
-                StockData.user_id == user.id,
-                StockData.stock_market == market,
-                StockData.stock_id == code,
-            )
-            .update(
-                {
-                    "stock_alias": body.stock_alias,
-                    "updated_at": now,
-                },
-                synchronize_session=False,
-            )
-        )
+        _sync_stock_alias(db, user.id, market, code, body.stock_alias, now)
     db.commit()
     db.refresh(stock)
     return {"item": _stock_to_dict(stock), "lookup_error": lookup_error}
@@ -418,6 +428,49 @@ def stock_summary(
     return {"items": items, "portfolio_summary": _portfolio_summary(items, service)}
 
 
+@router.put("/stocks/{stock_vid}")
+def update_stock(
+    stock_vid: str,
+    body: StockCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    stock = (
+        db.query(StockData)
+        .filter(StockData.user_id == user.id, StockData.stock_vid == stock_vid)
+        .first()
+    )
+    if not stock:
+        raise HTTPException(status_code=404, detail="未找到该股票资产")
+    lookup_info, lookup_error = StockMarketService(db).try_lookup(body.stock_market, body.stock_id)
+    now = datetime.utcnow()
+    _apply_stock_body(stock, body, lookup_info, now)
+    db.flush()
+    if body.stock_alias:
+        _sync_stock_alias(db, user.id, body.stock_market, body.stock_id, body.stock_alias, now)
+    db.commit()
+    db.refresh(stock)
+    return {"item": _stock_to_dict(stock), "lookup_error": lookup_error}
+
+
+@router.delete("/stocks/{stock_vid}")
+def delete_stock(
+    stock_vid: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    stock = (
+        db.query(StockData)
+        .filter(StockData.user_id == user.id, StockData.stock_vid == stock_vid)
+        .first()
+    )
+    if not stock:
+        raise HTTPException(status_code=404, detail="未找到该股票资产")
+    db.delete(stock)
+    db.commit()
+    return {"message": "股票资产已删除"}
+
+
 @router.get("/stocks/{stock_market}/{stock_id}/details")
 def stock_details(
     stock_market: str,
@@ -448,7 +501,12 @@ def stock_details(
             StockData.stock_market == market,
             StockData.stock_id == code,
         )
-        .order_by(StockData.created_at.desc(), StockData.stock_vid.desc())
+        .order_by(
+            StockData.stock_transaction_date.is_(None).asc(),
+            StockData.stock_transaction_date.desc(),
+            StockData.stock_entry_time.desc(),
+            StockData.stock_vid.desc(),
+        )
         .all()
     )
     external_sections = service.external_sections(market, code, force_refresh=force_refresh)
@@ -489,7 +547,12 @@ def stock_records(
     )
     total = q.count()
     records = (
-        q.order_by(StockData.created_at.desc(), StockData.stock_vid.desc())
+        q.order_by(
+            StockData.stock_transaction_date.is_(None).asc(),
+            StockData.stock_transaction_date.desc(),
+            StockData.stock_entry_time.desc(),
+            StockData.stock_vid.desc(),
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()

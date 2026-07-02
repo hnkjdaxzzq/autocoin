@@ -381,6 +381,8 @@ autocoin-t/
 | POST | `/stock-management/stocks` | 新增股票批次记录；查询行情失败仍允许保存；平均成本为空时优先取当前价 |
 | GET | `/stock-management/stocks/summary` | 按用户、市场、股票代码聚合资产；返回资产列表和按币种/CNY 折算的组合统计 |
 | GET | `/stock-management/stocks/{stock_market}/{stock_id}/records` | 查询某只股票批次明细，最多每页 5 条 |
+| PUT | `/stock-management/stocks/{stock_vid}` | 更新单条股票批次记录，允许修改市场和股票代码 |
+| DELETE | `/stock-management/stocks/{stock_vid}` | 删除单条股票批次记录 |
 
 ### 5.9 数据管理 `/data-management`（新增）
 

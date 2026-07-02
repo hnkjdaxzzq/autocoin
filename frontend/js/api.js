@@ -499,6 +499,14 @@ const API = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+    update: (stockVid, body) =>
+      apiFetch(`/stock-management/stocks/${encodeURIComponent(stockVid)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    delete: (stockVid) =>
+      apiFetch(`/stock-management/stocks/${encodeURIComponent(stockVid)}`, { method: "DELETE" }),
     summary: (params = {}) =>
       apiFetch("/stock-management/stocks/summary?" + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))

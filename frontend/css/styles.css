@@ -324,6 +324,10 @@ body {
 
 /* ===== Stock management ===== */
 .stock-action-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -332,12 +336,24 @@ body {
   margin-bottom: 22px;
 }
 
+.stock-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .stock-section-header {
   margin-bottom: 12px;
 }
 
 .stock-section-title {
   font-size: 18px;
+}
+
+.stock-assets-header {
+  margin-top: 18px;
 }
 
 .stock-portfolio-summary {
@@ -355,6 +371,7 @@ body {
 
 .stock-portfolio-table th,
 .stock-portfolio-table td {
+  padding: 9px 10px;
   text-align: left;
   white-space: nowrap;
 }
@@ -369,6 +386,13 @@ body {
   font-size: 11px;
   font-weight: 500;
   margin-top: 4px;
+}
+
+.stock-empty-table-cell {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 34px 16px;
+  text-align: center !important;
 }
 
 .stock-metric-loading {
@@ -396,6 +420,17 @@ body {
   animation-delay: .3s;
 }
 
+.stock-inline-loading {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.stock-inline-loading .stock-metric-loading {
+  min-width: 28px;
+}
+
 @keyframes stockMetricPulse {
   0%, 80%, 100% {
     opacity: .35;
@@ -413,24 +448,57 @@ body {
 
 .stock-table th,
 .stock-table td {
+  padding: 8px 9px;
   text-align: left;
+}
+
+.stock-sort-header {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  width: 100%;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stock-sort-header:hover,
+.stock-sort-header.active {
+  color: var(--primary);
+}
+
+.stock-sort-icon {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.stock-sort-header.active .stock-sort-icon {
+  color: var(--primary);
 }
 
 .stock-detail-col {
   width: 118px;
-  padding-left: 10px;
-  padding-right: 6px;
+  padding-left: 8px;
+  padding-right: 5px;
 }
 
 .stock-row-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
 
 .stock-detail-btn {
-  padding: 5px 9px;
+  padding: 4px 7px;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -447,15 +515,51 @@ body {
 }
 
 .stock-dividend-btn {
-  padding: 5px 9px;
+  padding: 4px 7px;
   font-size: 12px;
   white-space: nowrap;
 }
 
+.stock-record-action-btn {
+  padding: 4px 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.stock-record-delete-btn {
+  color: var(--expense);
+}
+
+.stock-delete-modal {
+  max-width: 420px;
+}
+
+.stock-delete-message {
+  color: var(--text);
+  margin-top: 10px;
+}
+
+.stock-delete-code {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 14px;
+}
+
+.stock-delete-code strong {
+  color: var(--expense);
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.stock-delete-input {
+  width: 100%;
+  margin-top: 10px;
+}
+
 .stock-expand-col {
   width: 34px;
-  padding-left: 10px;
-  padding-right: 6px;
+  padding-left: 8px;
+  padding-right: 4px;
 }
 
 .stock-expand-arrow {
@@ -495,7 +599,7 @@ body {
 }
 
 .stock-record-panel {
-  padding: 14px 16px 16px;
+  padding: 10px 12px 12px;
 }
 
 .stock-record-panel table {
@@ -503,6 +607,11 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+}
+
+.stock-record-panel th,
+.stock-record-panel td {
+  padding: 7px 9px;
 }
 
 .stock-record-pagination {
@@ -516,7 +625,7 @@ body {
 }
 
 .stock-record-pagination .btn {
-  padding: 6px 10px;
+  padding: 5px 8px;
 }
 
 .stock-record-pagination .btn:disabled {

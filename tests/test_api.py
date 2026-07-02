@@ -1585,6 +1585,67 @@ class TestStockManagement:
         assert len(records["items"]) == 5
         assert {record["stock_alias"] for record in records["items"]} == {"茅台"}
 
+    def test_stock_records_sort_update_and_delete(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": f"{market}-{stock_id}", "current_price": 10.0}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        owner_headers = self._register_headers(client, "stockrecordowner")
+        other_headers = self._register_headers(client, "stockrecordother")
+
+        created = []
+        for payload in [
+            {"stock_transaction_date": None, "stock_remark": "无成交日期"},
+            {"stock_transaction_date": "2026-01-01", "stock_remark": "较早成交"},
+            {"stock_transaction_date": "2026-02-01", "stock_remark": "较晚成交"},
+        ]:
+            resp = client.post("/api/v1/stock-management/stocks", headers=owner_headers, json={
+                "stock_market": "CN",
+                "stock_id": "600888",
+                "stock_amount": 1,
+                "stock_average_price": 8,
+                **payload,
+            })
+            assert resp.status_code == 201
+            created.append(resp.json()["item"])
+
+        records_resp = client.get("/api/v1/stock-management/stocks/CN/600888/records", headers=owner_headers)
+        assert records_resp.status_code == 200
+        records = records_resp.json()["items"]
+        assert [item["stock_remark"] for item in records] == ["较晚成交", "较早成交", "无成交日期"]
+
+        update_resp = client.put(f"/api/v1/stock-management/stocks/{created[2]['stock_vid']}", headers=owner_headers, json={
+            "stock_market": "US",
+            "stock_id": "EDITX",
+            "stock_name": "",
+            "stock_alias": "苹果",
+            "stock_amount": 3,
+            "stock_average_price": 9,
+            "stock_transaction_date": "2026-03-01",
+            "stock_remark": "已编辑",
+        })
+        assert update_resp.status_code == 200
+        updated = update_resp.json()["item"]
+        assert updated["stock_market"] == "US"
+        assert updated["stock_id"] == "EDITX"
+        assert updated["stock_currency"] == "USD"
+        assert updated["stock_amount"] == 3
+        assert updated["stock_alias"] == "苹果"
+        assert updated["stock_remark"] == "已编辑"
+
+        other_delete = client.delete(f"/api/v1/stock-management/stocks/{updated['stock_vid']}", headers=other_headers)
+        assert other_delete.status_code == 404
+
+        delete_resp = client.delete(f"/api/v1/stock-management/stocks/{updated['stock_vid']}", headers=owner_headers)
+        assert delete_resp.status_code == 200
+        assert delete_resp.json()["message"] == "股票资产已删除"
+
+        us_records = client.get("/api/v1/stock-management/stocks/US/EDITX/records", headers=owner_headers)
+        assert us_records.status_code == 200
+        assert us_records.json()["total"] == 0
+
     def test_stock_summary_portfolio_groups_currency_and_converts_to_cny(self, client, monkeypatch):
         from autocoin.services.stock_market_service import StockMarketService
 
