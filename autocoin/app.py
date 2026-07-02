@@ -20,16 +20,18 @@ from autocoin.services.stock_market_service import StockMarketService
 logger = logging.getLogger("autocoin")
 
 
-def _seconds_until_next_midnight(now: Optional[datetime] = None) -> float:
+def _seconds_until_next_sunday_3am(now: Optional[datetime] = None) -> float:
     now = now or datetime.now()
-    tomorrow = now.date() + timedelta(days=1)
-    next_midnight = datetime.combine(tomorrow, time.min)
-    return max((next_midnight - now).total_seconds(), 0)
+    days_until_sunday = (6 - now.weekday()) % 7
+    next_run = datetime.combine(now.date() + timedelta(days=days_until_sunday), time(hour=3))
+    if next_run <= now:
+        next_run += timedelta(days=7)
+    return max((next_run - now).total_seconds(), 0)
 
 
 async def _stock_cache_cleanup_loop():
     while True:
-        await asyncio.sleep(_seconds_until_next_midnight())
+        await asyncio.sleep(_seconds_until_next_sunday_3am())
         db = SessionLocal()
         try:
             deleted = StockMarketService(db).cleanup_expired_cache()

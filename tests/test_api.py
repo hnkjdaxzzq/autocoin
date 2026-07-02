@@ -4,6 +4,7 @@ Note: tests/conftest.py sets AUTOCOIN_DATABASE_URL and AUTOCOIN_JWT_SECRET
 to a temp directory BEFORE any autocoin modules are imported.
 """
 import pytest
+from datetime import datetime
 from fastapi.testclient import TestClient
 
 import autocoin.routers.ai_classification as ai_classification_router
@@ -21,7 +22,7 @@ from autocoin.routers.ai_classification import (
     _render_prompt_template,
     _summarize_error,
 )
-from autocoin.app import create_app
+from autocoin.app import create_app, _seconds_until_next_sunday_3am
 from tests.test_parsers import _make_alipay_csv, _make_cmb_securities_xls
 
 
@@ -49,6 +50,18 @@ def auth_headers(client):
     assert resp.status_code == 201
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+class TestAppSchedule:
+    def test_stock_cache_cleanup_runs_next_sunday_at_3am(self):
+        saturday_noon = datetime(2026, 7, 4, 12, 0, 0)
+        assert _seconds_until_next_sunday_3am(saturday_noon) == 15 * 60 * 60
+
+        sunday_before_run = datetime(2026, 7, 5, 2, 30, 0)
+        assert _seconds_until_next_sunday_3am(sunday_before_run) == 30 * 60
+
+        sunday_after_run = datetime(2026, 7, 5, 3, 0, 0)
+        assert _seconds_until_next_sunday_3am(sunday_after_run) == 7 * 24 * 60 * 60
 
 
 class TestAuth:
