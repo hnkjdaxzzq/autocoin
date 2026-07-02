@@ -444,6 +444,9 @@ const StockManagement = {
     }
     overlay.dataset.mode = isEdit ? "edit" : "create";
     overlay.dataset.stockVid = record ? record.stock_vid : "";
+    overlay.dataset.aliasTouched = record && record.stock_alias ? "true" : "false";
+    overlay.dataset.aliasAutoValue = "";
+    overlay.dataset.lookupSeq = "0";
     overlay.innerHTML = `
       <div class="modal-dialog modal-dialog-lg stock-modal">
         <div class="modal-title">${isEdit ? "编辑股票记录" : "新增股票记录"}</div>
@@ -475,7 +478,7 @@ const StockManagement = {
               <input name="stock_amount" type="number" min="0" step="0.000001" required value="${StockManagement.escape(record ? record.stock_amount : "")}">
             </label>
             <label class="form-field">
-              <span class="form-label">平均成本</span>
+              <span class="form-label stock-cost-label">平均成本 <span id="stock-live-price" class="stock-live-price"></span></span>
               <div class="stock-money-input">
                 <span id="stock-currency-symbol">¥</span>
                 <input name="stock_average_price" type="number" min="0" step="0.0001" placeholder="请填写本批次平均成本" value="${StockManagement.escape(record && record.stock_average_price !== null && record.stock_average_price !== undefined ? record.stock_average_price : "")}">
@@ -503,6 +506,7 @@ const StockManagement = {
     const marketEls = overlay.querySelectorAll("input[name='stock_market']");
     const codeEl = overlay.querySelector("#stock-id");
     const hintEl = overlay.querySelector("#stock-lookup-hint");
+    const aliasEl = overlay.querySelector("#stock-alias");
     const currentMarket = () => overlay.querySelector("input[name='stock_market']:checked").value;
     const updateCurrency = () => {
       overlay.querySelector("#stock-currency-symbol").textContent = currentMarket() === "US" ? "$" : "¥";
@@ -511,12 +515,18 @@ const StockManagement = {
     marketEls.forEach(marketEl => marketEl.addEventListener("change", () => {
       updateCurrency();
       overlay.querySelector("#stock-name").value = "";
-      overlay.querySelector("#stock-alias").value = "";
+      aliasEl.value = "";
+      overlay.dataset.aliasTouched = "false";
+      overlay.dataset.aliasAutoValue = "";
       StockManagement._state.latestLookup = null;
       StockManagement.renderLookupName(overlay, "等待输入股票代码");
+      StockManagement.renderLookupPrice(overlay);
       hintEl.textContent = "";
       StockManagement.queueLookup(overlay);
     }));
+    aliasEl.addEventListener("input", () => {
+      overlay.dataset.aliasTouched = "true";
+    });
     codeEl.addEventListener("input", () => StockManagement.queueLookup(overlay));
     codeEl.addEventListener("blur", () => StockManagement.lookupInModal(overlay));
     overlay.querySelector("#stock-cancel").addEventListener("click", () => overlay.remove());
@@ -536,32 +546,75 @@ const StockManagement = {
     const hintEl = overlay.querySelector("#stock-lookup-hint");
     if (!stockId) return;
     StockManagement.renderLookupName(overlay, "检索中", true);
-    hintEl.textContent = "正在查询股票信息...";
+    StockManagement.renderLookupPrice(overlay);
+    hintEl.textContent = "";
     hintEl.style.color = "var(--text-muted)";
+    const lookupSeq = Number(overlay.dataset.lookupSeq || "0") + 1;
+    overlay.dataset.lookupSeq = String(lookupSeq);
     try {
-      const data = await API.stockManagement.lookup({ stock_market: market, stock_id: stockId });
+      const data = await StockManagement.lookupStockWithRetry(market, stockId);
+      if (Number(overlay.dataset.lookupSeq || "0") !== lookupSeq) return;
       const currentMarket = overlay.querySelector("input[name='stock_market']:checked").value;
       const currentStockId = overlay.querySelector("#stock-id").value.trim().toUpperCase();
       if (currentMarket !== market || currentStockId !== stockId.toUpperCase()) return;
       nameEl.value = data.stock_name || "";
       StockManagement._state.latestLookup = data;
       StockManagement.renderLookupName(overlay, data.stock_name || "--");
-      if (data.stock_alias) aliasEl.value = data.stock_alias;
-      hintEl.textContent = `已查询到实时价：${StockManagement.formatMoney(data.current_price, data.stock_currency)}${data.from_cache ? "（缓存）" : ""}`;
+      StockManagement.applyDefaultAlias(overlay, data, market, stockId);
+      StockManagement.renderLookupPrice(overlay, data);
+      hintEl.textContent = "";
       hintEl.style.color = "var(--success)";
     } catch (err) {
+      if (Number(overlay.dataset.lookupSeq || "0") !== lookupSeq) return;
       StockManagement._state.latestLookup = null;
-      StockManagement.renderLookupName(overlay, "查询失败");
+      StockManagement.renderLookupName(overlay, "查询失败", false, { retry: true, error: err.message });
+      StockManagement.renderLookupPrice(overlay);
       hintEl.textContent = `查询失败：${err.message}。仍可保存该记录。`;
       hintEl.style.color = "var(--danger)";
     }
+  },
+
+  async lookupStockWithRetry(market, stockId, retryTimes = 2) {
+    let lastError = null;
+    for (let attempt = 0; attempt <= retryTimes; attempt += 1) {
+      try {
+        return await API.stockManagement.lookup({ stock_market: market, stock_id: stockId });
+      } catch (err) {
+        lastError = err;
+        if (attempt < retryTimes) {
+          await StockManagement.sleep(300 * (attempt + 1));
+        }
+      }
+    }
+    throw lastError;
+  },
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  },
+
+  applyDefaultAlias(overlay, data, market, stockId) {
+    const aliasEl = overlay.querySelector("#stock-alias");
+    const previousAutoValue = overlay.dataset.aliasAutoValue || "";
+    const aliasTouched = overlay.dataset.aliasTouched === "true";
+    const defaultAlias = market === "US" ? stockId.toUpperCase() : (data.stock_name || "");
+    const shouldApply = defaultAlias && !aliasTouched && (!aliasEl.value || aliasEl.value === previousAutoValue);
+    if (!shouldApply) return;
+    aliasEl.value = defaultAlias;
+    overlay.dataset.aliasAutoValue = defaultAlias;
   },
 
   queueLookup(overlay) {
     clearTimeout(StockManagement._state.lookupTimer);
     const stockId = overlay.querySelector("#stock-id").value.trim();
     overlay.querySelector("#stock-name").value = "";
+    const aliasEl = overlay.querySelector("#stock-alias");
+    if (overlay.dataset.aliasTouched !== "true") {
+      aliasEl.value = "";
+      overlay.dataset.aliasAutoValue = "";
+    }
     StockManagement._state.latestLookup = null;
+    StockManagement.renderLookupPrice(overlay);
     if (!stockId) {
       StockManagement.renderLookupName(overlay, "等待输入股票代码");
       overlay.querySelector("#stock-lookup-hint").textContent = "";
@@ -571,12 +624,35 @@ const StockManagement = {
     StockManagement._state.lookupTimer = setTimeout(() => StockManagement.lookupInModal(overlay), 600);
   },
 
-  renderLookupName(overlay, text, loading = false) {
+  renderLookupName(overlay, text, loading = false, options = {}) {
     const el = overlay.querySelector("#stock-name-inline");
     if (!el) return;
-    el.innerHTML = loading
-      ? `<span class="stock-lookup-spinner"></span><span>${StockManagement.escape(text)}</span>`
-      : `<span class="stock-name-placeholder">${StockManagement.escape(text)}</span>`;
+    if (loading) {
+      el.innerHTML = `<span class="stock-lookup-spinner"></span><span>${StockManagement.escape(text)}</span>`;
+      return;
+    }
+    el.innerHTML = `
+      <span class="stock-name-placeholder">${StockManagement.escape(text)}</span>
+      ${options.retry ? `<button class="stock-lookup-retry" type="button">重试</button>` : ""}
+    `;
+    const retryBtn = el.querySelector(".stock-lookup-retry");
+    if (retryBtn) {
+      retryBtn.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        StockManagement.lookupInModal(overlay);
+      });
+    }
+  },
+
+  renderLookupPrice(overlay, data = null) {
+    const el = overlay.querySelector("#stock-live-price");
+    if (!el) return;
+    if (!data || data.current_price === null || data.current_price === undefined) {
+      el.textContent = "";
+      return;
+    }
+    el.textContent = `实时价：${StockManagement.formatMoney(data.current_price, data.stock_currency)}${data.from_cache ? "（缓存）" : ""}`;
   },
 
   async submitModal(event, overlay, container) {

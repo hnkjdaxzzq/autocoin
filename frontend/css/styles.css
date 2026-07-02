@@ -961,6 +961,42 @@ body {
 }
 
 .stock-name-placeholder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-lookup-retry {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stock-lookup-retry:hover {
+  background: var(--primary-light);
+}
+
+.stock-cost-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stock-live-price {
+  flex: 1;
+  min-width: 0;
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
