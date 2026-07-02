@@ -158,7 +158,7 @@ const StockManagement = {
       { key: "current_price", label: "当前股价", type: "number" },
       { key: "stock_average_price", label: "持仓成本", type: "number" },
       { key: "stock_dividend_per_share_last_year", label: "每股派息(去年)", type: "number" },
-      { key: "stock_dividend_change_rate", label: "环比变化", type: "number" },
+      { key: "stock_dividend_change_rate", label: "股息环比变化", type: "number" },
       { key: "dividend_rate", label: "股息率", type: "number" },
       { key: "holding_dividend_rate", label: "持仓股息率", type: "number" },
       { key: "annual_dividend", label: "预计股息/年", type: "number" },
