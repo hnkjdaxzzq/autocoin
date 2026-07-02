@@ -52,7 +52,8 @@ autocoin-t/
 │   │   ├── classification_rule.py   # 分类规则模型
 │   │   ├── alias_rule.py            # 别名规则模型（新增）
 │   │   ├── import_schema.py         # 导入相关模型
-│   │   └── statistics.py            # 统计模型
+│   │   ├── statistics.py            # 统计模型
+│   │   └── stock_management.py      # 股票详情接口响应模型
 │   │
 │   ├── repository/                  # 数据访问层（Repository 模式）
 │   │   ├── base.py                  # DataRepository 抽象基类
@@ -68,10 +69,16 @@ autocoin-t/
 │   │   └── hsbc_pulse.py           # 汇丰 PULSE 信用卡 PDF 解析器（新增）
 │   │
 │   ├── services/                    # 业务逻辑层
+│   │   ├── exchange_rate_service.py # CNY 汇率查询与 FX 缓存复用
 │   │   ├── import_service.py        # 文件导入服务
 │   │   ├── image_recognizer.py      # 图片识别服务（多 LLM 降级链）
 │   │   ├── stats_service.py         # 统计服务
-│   │   └── stock_market_service.py  # 股票行情查询与缓存服务
+│   │   ├── stock_cache_service.py   # 股票查询缓存与 legacy 行情缓存兼容
+│   │   ├── stock_constants.py       # 股票市场、币种映射与标准化工具
+│   │   ├── stock_dividend_service.py # 股票股息解析、年度汇总与摘要选择
+│   │   ├── stock_market_service.py  # 股票行情 lookup、外部数据与服务编排
+│   │   ├── stock_portfolio_service.py # 股票资产 CRUD、聚合、组合统计与明细编排
+│   │   └── stock_quote_service.py   # A 股/美股基础行情 Provider 与 A 股兜底查询
 │   │
 │   └── routers/                     # API 路由（全部在 /api/v1 下）
 │       ├── auth.py                  # 注册/登录/改密
@@ -99,7 +106,11 @@ autocoin-t/
 │       ├── rules.js                 # 规则页（分类规则 + 别名规则）
 │       ├── stats.js                 # 统计页（年度/月度/分类/钻取）
 │       ├── broker-income-analysis.js # 券商收入分析页（新增）
-│       ├── stock-management.js      # 股票详情页（新增）
+│       ├── stock-management.js      # 股票详情页入口、状态与主流程
+│       ├── stock-management-formatters.js # 股票详情页格式化工具
+│       ├── stock-management-table.js # 股票汇总表、组合统计表与明细展开
+│       ├── stock-management-modal.js # 股票新增/编辑/删除弹窗
+│       ├── stock-management-details.js # 股票详情/股息弹窗与外部数据表
 │       ├── data-management.js       # 数据管理页（备份/还原，新增）
 │       ├── special-data-processing.js # 特殊数据处理页：退款数据处理
 │       └── ai-classification.js     # AI 自动分类页（新增）
@@ -108,7 +119,8 @@ autocoin-t/
 │   ├── conftest.py                  # 测试数据库设置/清理
 │   ├── test_parsers.py              # 解析器测试（21 个）
 │   ├── test_image_recognizer.py     # 图片识别测试（10 个）
-│   └── test_api.py                  # API 集成测试（32 个）
+│   ├── test_api.py                  # API 集成测试（32 个）
+│   └── test_stock_services.py       # 股票服务层单元测试
 │
 ├── VibeCodeing/                     # 功能实现文档（开发过程记录）
 │   ├── alias-rules-implementation.md
@@ -375,6 +387,9 @@ autocoin-t/
 
 ### 5.8 股票详情 `/stock-management`（新增）
 
+> 路由层保持轻量，只处理 HTTP 参数、认证、事务提交与错误映射；股票市场/币种常量与标准化集中在 `stock_constants.py`，股票资产 CRUD、聚合、组合统计和详情编排集中在 `StockPortfolioService`，行情 lookup 与外部数据编排集中在 `StockMarketService`，A 股/美股基础行情 Provider 集中在 `StockQuoteService`，股票查询缓存和 legacy 行情缓存兼容集中在 `StockCacheService`，股息解析和年度摘要选择集中在 `StockDividendService`，CNY 汇率查询集中在 `ExchangeRateService`。
+> 股票详情接口已在 `autocoin/schemas/stock_management.py` 定义显式响应模型，字段保持兼容，便于约束接口结构和生成 OpenAPI 文档。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/stock-management/lookup` | 查询股票名称、实时价和已有别名，行情缓存 TTL 3 小时 |
@@ -526,7 +541,7 @@ autocoin-t/
 
 - 框架：pytest + httpx + FastAPI TestClient
 - 测试数据库：内存 SQLite（每次测试自动创建/销毁）
-- 测试文件：`tests/test_parsers.py`（21 个）、`tests/test_image_recognizer.py`（10 个）、`tests/test_api.py`（32 个），合计 63 个
+- 测试文件：`tests/test_parsers.py`（21 个）、`tests/test_image_recognizer.py`（10 个）、`tests/test_api.py`（32 个）、`tests/test_stock_services.py`（股票服务层单元测试）
 - 运行：`pytest tests/ -v`
 
 ---
