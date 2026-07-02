@@ -424,11 +424,17 @@ class StockMarketService:
             for row in rows
             if isinstance(row, dict)
         ]
-        parsed_rows.sort(key=lambda row: cls._sortable_date(row.get("公告日期")), reverse=True)
+        parsed_rows.sort(
+            key=lambda row: (
+                cls._sortable_date(row.get("公告日期")),
+                cls._sortable_date(row.get("报告期")),
+            ),
+            reverse=True,
+        )
         section["dividend_parse"] = {
             "raw_columns": section.get("columns") or [],
             "raw_rows": rows,
-            "yearly_summary_columns": ["年份", "每股派息金额", "环比变化"],
+            "yearly_summary_columns": ["年份", "派息次数", "每股派息金额", "环比变化"],
             "yearly_summary_rows": cls._ths_yearly_dividend_summary(parsed_rows),
             "per_share_columns": [
                 "公告日期",
@@ -488,12 +494,14 @@ class StockMarketService:
     @classmethod
     def _ths_yearly_dividend_summary(cls, rows: list[dict]) -> list[dict]:
         yearly = {}
+        yearly_counts = {}
         for row in rows:
             year = cls._year_from_report_period(row.get("报告期"))
             per_share = row.get("每股派息")
             if year is None or per_share is None:
                 continue
             yearly[year] = yearly.get(year, 0) + float(per_share)
+            yearly_counts[year] = yearly_counts.get(year, 0) + 1
         summary_by_year = {}
         for year, amount in sorted(yearly.items()):
             previous_amount = yearly.get(year - 1)
@@ -502,6 +510,7 @@ class StockMarketService:
                 change = (amount - previous_amount) / previous_amount * 100
             summary_by_year[year] = {
                 "年份": year,
+                "派息次数": yearly_counts.get(year, 0),
                 "每股派息金额": round(amount, 6),
                 "环比变化": round(change, 2) if change is not None else None,
             }

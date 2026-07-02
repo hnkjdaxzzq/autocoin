@@ -460,7 +460,7 @@ const StockManagement = {
           </div>
         </div>
         <div class="stock-details-body" data-stock-dividend-body>
-          <div class="loading">正在查询同花顺分红数据...</div>
+          <div class="loading">正在查询股息分红数据...</div>
         </div>
         <div class="modal-buttons">
           <button class="btn btn-primary" type="button" data-stock-dividend-close>关闭</button>
@@ -490,6 +490,102 @@ const StockManagement = {
   },
 
   renderDividendDetails(data) {
+    const market = (data.summary || {}).stock_market;
+    if (market === "US") {
+      return StockManagement.renderUsDividendDetails(data);
+    }
+    return StockManagement.renderCnDividendDetails(data);
+  },
+
+  renderUsDividendDetails(data) {
+    const sections = data.external_sections || [];
+    const yahooSection = sections.find(section => section.source === "yfinance.Ticker.get_dividends");
+    if (!yahooSection) {
+      return `<div class="empty">暂无 Yahoo Finance 历史股息数据</div>`;
+    }
+    if (yahooSection.status === "error") {
+      return `<div class="empty" style="color:var(--expense)">Yahoo Finance 历史股息查询失败：${StockManagement.escape(yahooSection.error || "未知错误")}</div>`;
+    }
+    const rows = StockManagement.normalizedUsDividendRows(yahooSection.rows || []);
+    const columns = ["date", "dividend"];
+    const yearlyRows = StockManagement.yearlyDividendSummary(rows, "date", "dividend");
+    const yearlyColumns = ["年份", "派息次数", "每股派息金额", "环比变化"];
+    return `
+      <section class="stock-details-section">
+        <div class="stock-dividend-overview">
+          <div class="stock-dividend-summary">
+            <span>Yahoo Finance 历史股息</span>
+            <strong>${StockManagement.formatNumber(rows.length)} 条</strong>
+          </div>
+        </div>
+      </section>
+      <section class="stock-details-section">
+        <div class="stock-details-section-title">最近5年每股派息汇总</div>
+        ${StockManagement.renderDetailsTable(yearlyColumns, yearlyRows)}
+      </section>
+      <section class="stock-details-section">
+        <div class="stock-details-section-title">Yahoo Finance 历史股息</div>
+        ${StockManagement.renderDetailsTable(columns, rows)}
+      </section>
+    `;
+  },
+
+  normalizedUsDividendRows(rows) {
+    return rows
+      .map(row => ({
+        ...row,
+        date: StockManagement.dateOnly(row.date),
+      }))
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  },
+
+  yearlyDividendSummary(rows, dateKey, amountKey) {
+    const yearly = {};
+    const yearlyCounts = {};
+    rows.forEach(row => {
+      const year = StockManagement.yearFromDate(row[dateKey]);
+      const amount = Number(row[amountKey]);
+      if (!year || !Number.isFinite(amount)) return;
+      yearly[year] = (yearly[year] || 0) + amount;
+      yearlyCounts[year] = (yearlyCounts[year] || 0) + 1;
+    });
+    const summaryByYear = {};
+    Object.keys(yearly).map(Number).sort((a, b) => a - b).forEach(year => {
+      const amount = yearly[year];
+      const previousAmount = yearly[year - 1];
+      const change = previousAmount ? ((amount - previousAmount) / previousAmount * 100) : null;
+      summaryByYear[year] = {
+        "年份": year,
+        "派息次数": yearlyCounts[year] || 0,
+        "每股派息金额": Number(amount.toFixed(6)),
+        "环比变化": change === null ? null : Number(change.toFixed(2)),
+      };
+    });
+    return Object.keys(summaryByYear)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .slice(0, 5)
+      .map(year => summaryByYear[year]);
+  },
+
+  dateOnly(value) {
+    if (!value) return value;
+    const text = String(value).trim();
+    const match = text.match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+    const pad = number => String(number).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  },
+
+  yearFromDate(value) {
+    if (!value) return null;
+    const match = String(value).match(/(19|20)\d{2}/);
+    return match ? Number(match[0]) : null;
+  },
+
+  renderCnDividendDetails(data) {
     const sections = data.external_sections || [];
     const thsSection = sections.find(section => section.source === "akshare.stock_fhps_detail_ths");
     if (!thsSection) {

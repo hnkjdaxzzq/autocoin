@@ -1611,6 +1611,12 @@ class TestStockManagement:
                     "分红方案说明": "10派1元(含税)",
                 },
                 {
+                    "公告日期": "2026-03-01",
+                    "报告期": "2026一季报",
+                    "除权除息日期": "2026-04-15",
+                    "分红方案说明": "10派2元(含税)",
+                },
+                {
                     "公告日期": "2025-05-01",
                     "报告期": "2024年报",
                     "除权除息日期": "2025-06-05",
@@ -1638,13 +1644,16 @@ class TestStockManagement:
         assert parsed["per_share_rows"][0]["现金派息"] == 22.012
         assert parsed["per_share_rows"][0]["每股派息"] == 2.2012
         assert parsed["per_share_rows"][0]["解析状态"] == "已解析"
-        assert parsed["per_share_rows"][1]["每股派息"] == 0.1
-        assert parsed["per_share_rows"][2]["每股派息"] == 1.0
-        assert parsed["per_share_rows"][3]["每股派息"] is None
-        assert parsed["per_share_rows"][3]["解析状态"] == "未识别"
-        assert parsed["yearly_summary_columns"] == ["年份", "每股派息金额", "环比变化"]
-        assert parsed["yearly_summary_rows"][0] == {"年份": 2025, "每股派息金额": 2.3012, "环比变化": 130.12}
-        assert parsed["yearly_summary_rows"][1] == {"年份": 2024, "每股派息金额": 1.0, "环比变化": None}
+        assert parsed["per_share_rows"][1]["报告期"] == "2026一季报"
+        assert parsed["per_share_rows"][1]["每股派息"] == 0.2
+        assert parsed["per_share_rows"][2]["报告期"] == "2025中报"
+        assert parsed["per_share_rows"][2]["每股派息"] == 0.1
+        assert parsed["per_share_rows"][3]["每股派息"] == 1.0
+        assert parsed["per_share_rows"][4]["每股派息"] is None
+        assert parsed["per_share_rows"][4]["解析状态"] == "未识别"
+        assert parsed["yearly_summary_columns"] == ["年份", "派息次数", "每股派息金额", "环比变化"]
+        assert parsed["yearly_summary_rows"][0] == {"年份": 2026, "派息次数": 1, "每股派息金额": 0.2, "环比变化": -91.31}
+        assert parsed["yearly_summary_rows"][1] == {"年份": 2025, "派息次数": 2, "每股派息金额": 2.3012, "环比变化": 130.12}
 
     def test_cn_stock_details_returns_summary_records_and_sections(self, client, monkeypatch):
         from autocoin.services.stock_market_service import StockMarketService
