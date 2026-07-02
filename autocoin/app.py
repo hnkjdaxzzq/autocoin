@@ -1,3 +1,8 @@
+import asyncio
+from contextlib import suppress
+from datetime import datetime, time, timedelta
+from typing import Optional
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,10 +13,36 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 
 from autocoin.config import settings
-from autocoin.database import init_db
-from autocoin.routers import ai_classification, auth, broker_income_analysis, data_management, imports, rules, special_data_processing, statistics, transactions
+from autocoin.database import SessionLocal, init_db
+from autocoin.routers import ai_classification, auth, broker_income_analysis, data_management, imports, rules, special_data_processing, statistics, stock_management, transactions
+from autocoin.services.stock_market_service import StockMarketService
 
 logger = logging.getLogger("autocoin")
+
+
+def _seconds_until_next_midnight(now: Optional[datetime] = None) -> float:
+    now = now or datetime.now()
+    tomorrow = now.date() + timedelta(days=1)
+    next_midnight = datetime.combine(tomorrow, time.min)
+    return max((next_midnight - now).total_seconds(), 0)
+
+
+async def _stock_cache_cleanup_loop():
+    while True:
+        await asyncio.sleep(_seconds_until_next_midnight())
+        db = SessionLocal()
+        try:
+            deleted = StockMarketService(db).cleanup_expired_cache()
+            db.commit()
+            if deleted:
+                logger.info("已清理过期股票数据缓存 %s 条", deleted)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            db.rollback()
+            logger.exception("股票数据缓存清理失败")
+        finally:
+            db.close()
 
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
@@ -64,8 +95,11 @@ def create_app() -> FastAPI:
     app.add_middleware(NoCacheStaticMiddleware)
 
     @app.on_event("startup")
-    def startup():
+    async def startup():
         init_db()
+        app.state.stock_cache_cleanup_task = asyncio.create_task(
+            _stock_cache_cleanup_loop()
+        )
         # Security warnings
         if settings.jwt_secret == "autocoin-dev-secret-change-in-production":
             logger.warning(
@@ -76,6 +110,14 @@ def create_app() -> FastAPI:
             )
         if "*" in settings.cors_origins:
             logger.warning("CORS 允许所有来源 (*)，生产环境请设置具体域名")
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        task = getattr(app.state, "stock_cache_cleanup_task", None)
+        if task:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     # IMPORTANT: Register API routes BEFORE static files mount
     # to prevent /api/v1/* from being served as static files
@@ -88,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(data_management.router, prefix=settings.api_prefix)
     app.include_router(special_data_processing.router, prefix=settings.api_prefix)
     app.include_router(ai_classification.router, prefix=settings.api_prefix)
+    app.include_router(stock_management.router, prefix=settings.api_prefix)
 
     # Serve frontend SPA - must be last
     app.mount(

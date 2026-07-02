@@ -488,6 +488,28 @@ const API = {
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       )),
   },
+  stockManagement: {
+    lookup: (params) =>
+      apiFetch("/stock-management/lookup?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+    create: (body) =>
+      apiFetch("/stock-management/stocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    summary: (params = {}) =>
+      apiFetch("/stock-management/stocks/summary?" + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+    details: (market, stockId) =>
+      apiFetch(`/stock-management/stocks/${encodeURIComponent(market)}/${encodeURIComponent(stockId)}/details`),
+    records: (market, stockId, params) =>
+      apiFetch(`/stock-management/stocks/${encodeURIComponent(market)}/${encodeURIComponent(stockId)}/records?` + new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
+  },
   aiClassification: {
     getPreferences: () => apiFetch("/ai-classification/preferences"),
     savePreferences: (body) =>

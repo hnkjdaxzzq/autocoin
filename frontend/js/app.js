@@ -4,6 +4,7 @@ const ROUTES = {
   "/dashboard":    Dashboard,
   "/transactions": Transactions,
   "/broker-income-analysis": BrokerIncomeAnalysis,
+  "/stock-management": StockManagement,
   "/import":       Import,
   "/rules":        RulesPage,
   "/stats":        Stats,
@@ -41,6 +42,7 @@ function navigate() {
     a.classList.toggle("active", a.dataset.route === route);
   });
   updateAdvancedNav(route);
+  updateStockNav(route);
 
   // Update username display
   const userEl = document.getElementById("user-display");
@@ -75,6 +77,15 @@ function initAdvancedNav() {
   });
 }
 
+function initStockNav() {
+  const group = document.getElementById("stock-nav-group");
+  const toggle = document.getElementById("stock-nav-toggle");
+  if (!group || !toggle) return;
+  toggle.addEventListener("click", () => {
+    group.classList.toggle("open");
+  });
+}
+
 function updateAdvancedNav(route) {
   const group = document.getElementById("advanced-nav-group");
   const toggle = document.getElementById("advanced-nav-toggle");
@@ -83,6 +94,16 @@ function updateAdvancedNav(route) {
   const isAdvancedRoute = advancedRoutes.includes(route);
   group.classList.toggle("open", isAdvancedRoute || group.classList.contains("open"));
   toggle.classList.toggle("active", isAdvancedRoute);
+}
+
+function updateStockNav(route) {
+  const group = document.getElementById("stock-nav-group");
+  const toggle = document.getElementById("stock-nav-toggle");
+  if (!group || !toggle) return;
+  const stockRoutes = ["/broker-income-analysis", "/stock-management"];
+  const isStockRoute = stockRoutes.includes(route);
+  group.classList.toggle("open", isStockRoute || group.classList.contains("open"));
+  toggle.classList.toggle("active", isStockRoute);
 }
 
 /* ===== Sidebar User Hover Menu ===== */
@@ -304,6 +325,7 @@ window.addEventListener("load", async () => {
   initMePopup();
   initSidebarUserMenu();
   initAdvancedNav();
+  initStockNav();
   // Validate stored token on app start
   if (Auth.isLoggedIn()) {
     try {

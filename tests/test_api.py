@@ -1481,3 +1481,531 @@ class TestDataManagementBackup:
         )
         assert resp.status_code == 400
         assert resp.json()["detail"] == "数据错误，请检查上传的备份数据。"
+
+
+class TestStockManagement:
+    def _register_headers(self, client, username):
+        resp = client.post("/api/v1/auth/register", json={
+            "username": username,
+            "password": "password123",
+            "invite_code": "tarikz",
+        })
+        assert resp.status_code == 201
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    def test_create_allows_lookup_failure(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockLookupError, StockMarketService
+
+        def fail_lookup(self, market, stock_id):
+            raise StockLookupError("行情不可用")
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fail_lookup)
+        headers = self._register_headers(client, "stockfailure")
+
+        resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600000",
+            "stock_amount": 10,
+            "stock_average_price": 7.5,
+            "stock_alias": "浦发",
+        })
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["lookup_error"] == "行情不可用"
+        assert len(data["item"]["stock_vid"]) == 16
+        assert data["item"]["stock_currency"] == "CNY"
+
+    def test_summary_alias_sync_and_records_pagination(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "测试股票", "current_price": 20.0}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        headers = self._register_headers(client, "stockowner")
+
+        for idx in range(6):
+            resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+                "stock_market": "CN",
+                "stock_id": "600519",
+                "stock_amount": 10 if idx == 0 else 1,
+                "stock_average_price": 5 if idx == 0 else (None if idx == 1 else 8),
+                "stock_alias": "贵州茅台" if idx < 5 else "茅台",
+                "stock_remark": f"批次{idx}",
+                "stock_transaction_date": "2026-07-01" if idx == 0 else None,
+            })
+            assert resp.status_code == 201
+            if idx == 1:
+                data = resp.json()["item"]
+                assert data["stock_average_price"] == 20.0
+                assert data["stock_entry_time"]
+            if idx == 0:
+                assert resp.json()["item"]["stock_transaction_date"] == "2026-07-01"
+
+        summary_resp = client.get("/api/v1/stock-management/stocks/summary", headers=headers)
+        assert summary_resp.status_code == 200
+        items = summary_resp.json()["items"]
+        assert len(items) == 1
+        item = items[0]
+        assert item["stock_alias"] == "茅台"
+        assert item["stock_amount"] == 15
+        assert item["total_value"] == 300
+        assert item["total_cost"] == 102
+        assert item["current_return_rate"] == 194.1
+        assert item["current_price"] == 20.0
+        assert item["stock_average_price"] == 6.8
+
+        records_resp = client.get("/api/v1/stock-management/stocks/CN/600519/records?page=1", headers=headers)
+        assert records_resp.status_code == 200
+        records = records_resp.json()
+        assert records["total"] == 6
+        assert records["page_size"] == 5
+        assert records["total_pages"] == 2
+        assert len(records["items"]) == 5
+        assert {record["stock_alias"] for record in records["items"]} == {"茅台"}
+
+    def test_lookup_uses_existing_schema_without_id_column(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "Apple Inc.", "current_price": 200.0}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        headers = self._register_headers(client, "stocklookup")
+
+        resp = client.get("/api/v1/stock-management/lookup?stock_market=US&stock_id=AAPL", headers=headers)
+
+        assert resp.status_code == 200
+        assert resp.json()["stock_name"] == "Apple Inc."
+
+    def test_cn_stock_details_returns_summary_records_and_sections(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {
+                "stock_name": "中国移动",
+                "current_price": 100.0,
+                "raw_api_source": "test",
+                "raw_api_data": {"代码": stock_id},
+            }
+
+        def fake_sections(self, market, stock_id):
+            assert market == "CN"
+            assert stock_id == "600941"
+            return [
+                {
+                    "title": "巨潮资讯历史分红",
+                    "source": "akshare.stock_dividend_cninfo",
+                    "status": "ok",
+                    "columns": ["派息比例", "派息日"],
+                    "rows": [{"派息比例": 22.012, "派息日": "2026-06-05"}],
+                    "error": None,
+                },
+                {
+                    "title": "新浪财经分红历史",
+                    "source": "akshare.stock_history_dividend_detail",
+                    "status": "ok",
+                    "columns": ["派息", "除权除息日"],
+                    "rows": [{"派息": 22.012, "除权除息日": "2026-06-05"}],
+                    "error": None,
+                },
+                {
+                    "title": "东方财富分红送配详情",
+                    "source": "akshare.stock_fhps_detail_em",
+                    "status": "ok",
+                    "columns": ["现金分红-现金分红比例"],
+                    "rows": [{"现金分红-现金分红比例": 22.012}],
+                    "error": None,
+                },
+                {
+                    "title": "同花顺分红情况",
+                    "source": "akshare.stock_fhps_detail_ths",
+                    "status": "ok",
+                    "columns": ["分红方案说明"],
+                    "rows": [{"分红方案说明": "10派22.012元(含税)"}],
+                    "error": None,
+                },
+            ]
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "external_sections", fake_sections)
+        headers = self._register_headers(client, "stockdetailscn")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600941",
+            "stock_amount": 2,
+            "stock_average_price": 80,
+            "stock_alias": "移动",
+        })
+        assert create_resp.status_code == 201
+
+        resp = client.get("/api/v1/stock-management/stocks/CN/600941/details", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["summary"]["stock_name"] == "中国移动"
+        assert data["summary"]["total_value"] == 200
+        assert data["summary"]["total_cost"] == 160
+        assert data["lookup"]["raw_api_data"]["代码"] == "600941"
+        assert len(data["records"]) == 1
+        assert len(data["external_sections"]) == 4
+        assert data["external_sections"][0]["rows"][0]["派息日"] == "2026-06-05"
+
+    def test_us_stock_details_keeps_failed_external_section(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "JEPI", "current_price": 55.0}
+
+        def fake_sections(self, market, stock_id):
+            assert market == "US"
+            assert stock_id == "JEPI"
+            return [
+                {
+                    "title": "Yahoo Finance 基础信息",
+                    "source": "yfinance.Ticker.get_info",
+                    "status": "ok",
+                    "columns": ["field", "value"],
+                    "rows": [{"field": "yield", "value": 0.0845}],
+                    "error": None,
+                },
+                {
+                    "title": "Yahoo Finance 历史股息",
+                    "source": "yfinance.Ticker.get_dividends",
+                    "status": "ok",
+                    "columns": ["date", "dividend"],
+                    "rows": [{"date": "2026-06-01", "dividend": 0.389}],
+                    "error": None,
+                },
+                {
+                    "title": "Yahoo Finance 公司行为",
+                    "source": "yfinance.Ticker.actions",
+                    "status": "ok",
+                    "columns": ["Dividends", "Stock Splits", "Capital Gains"],
+                    "rows": [{"Dividends": 0.389, "Stock Splits": 0, "Capital Gains": 0}],
+                    "error": None,
+                },
+                {
+                    "title": "Yahoo Finance 非零分红/拆股历史",
+                    "source": "yfinance.Ticker.history(actions=True)",
+                    "status": "error",
+                    "columns": [],
+                    "rows": [],
+                    "error": "Yahoo timeout",
+                },
+            ]
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "external_sections", fake_sections)
+        headers = self._register_headers(client, "stockdetailsus")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "US",
+            "stock_id": "JEPI",
+            "stock_amount": 3,
+            "stock_average_price": 50,
+        })
+        assert create_resp.status_code == 201
+
+        resp = client.get("/api/v1/stock-management/stocks/US/JEPI/details", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["summary"]["stock_currency"] == "USD"
+        assert data["external_sections"][1]["rows"][0]["dividend"] == 0.389
+        assert data["external_sections"][3]["status"] == "error"
+        assert data["external_sections"][3]["error"] == "Yahoo timeout"
+
+    def test_stock_details_requires_auth_and_valid_market(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "测试股票", "current_price": 20.0}
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "external_sections", lambda self, market, stock_id: [])
+        headers = self._register_headers(client, "stockdetailsauth")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600519",
+            "stock_amount": 1,
+            "stock_average_price": 10,
+        })
+        assert create_resp.status_code == 201
+
+        unauth_resp = client.get("/api/v1/stock-management/stocks/CN/600519/details")
+        assert unauth_resp.status_code == 401
+
+        invalid_resp = client.get("/api/v1/stock-management/stocks/HK/600519/details", headers=headers)
+        assert invalid_resp.status_code == 422
+
+    def test_cn_lookup_falls_back_when_akshare_fails(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        def fail_akshare(self, stock_id):
+            raise RuntimeError("AKShare remote closed")
+
+        def fake_tencent(self, stock_id):
+            return {
+                "stock_name": "中国海油",
+                "current_price": 27.5,
+                "raw_api_source": "tencent.qt.gtimg",
+                "raw_api_data": {
+                    "symbol": "sh600938",
+                    "field_count": 4,
+                    "fields": ["1", "中国海油", "600938", "27.5"],
+                },
+            }
+
+        monkeypatch.setattr(StockMarketService, "_fetch_cn_akshare", fail_akshare)
+        monkeypatch.setattr(StockMarketService, "_fetch_cn_tencent", fake_tencent)
+        headers = self._register_headers(client, "stockcnfallback")
+
+        resp = client.get("/api/v1/stock-management/lookup?stock_market=CN&stock_id=600938", headers=headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["stock_name"] == "中国海油"
+        assert data["current_price"] == 27.5
+        assert data["raw_api_source"] == "tencent.qt.gtimg"
+        assert data["raw_api_data"]["fields"][1] == "中国海油"
+
+        cached_resp = client.get("/api/v1/stock-management/lookup?stock_market=CN&stock_id=600938", headers=headers)
+        assert cached_resp.status_code == 200
+        cached = cached_resp.json()
+        assert cached["from_cache"] is True
+        assert cached["raw_api_data"]["fields"][3] == "27.5"
+
+    def test_stock_lookup_uses_unified_query_cache(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        calls = {"count": 0}
+
+        def fake_lookup(self, market, stock_id):
+            calls["count"] += 1
+            return {
+                "stock_name": "缓存股票",
+                "current_price": 12.3,
+                "raw_api_source": "test.lookup",
+                "raw_api_data": {"call": calls["count"]},
+            }
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        headers = self._register_headers(client, "stockquerycache")
+
+        first = client.get("/api/v1/stock-management/lookup?stock_market=CN&stock_id=600001", headers=headers)
+        second = client.get("/api/v1/stock-management/lookup?stock_market=CN&stock_id=600001", headers=headers)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert calls["count"] == 1
+        assert first.json()["from_cache"] is False
+        assert second.json()["from_cache"] is True
+        assert second.json()["raw_api_data"]["call"] == 1
+
+    def test_stock_summary_does_not_refresh_prices_by_default(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockLookupError, StockMarketService
+
+        calls = {"count": 0}
+
+        def fail_lookup(self, market, stock_id):
+            calls["count"] += 1
+            raise StockLookupError("行情不可用")
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fail_lookup)
+        headers = self._register_headers(client, "stocksummarylazy")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600002",
+            "stock_amount": 2,
+            "stock_average_price": 10,
+        })
+        assert create_resp.status_code == 201
+        assert calls["count"] == 1
+
+        summary_resp = client.get("/api/v1/stock-management/stocks/summary", headers=headers)
+        assert summary_resp.status_code == 200
+        item = summary_resp.json()["items"][0]
+        assert calls["count"] == 1
+        assert item["current_price"] is None
+        assert item["total_value"] is None
+        assert item["current_return_rate"] is None
+        assert item["lookup_error"] is None
+
+        refresh_resp = client.get("/api/v1/stock-management/stocks/summary?refresh_prices=true", headers=headers)
+        assert refresh_resp.status_code == 200
+        assert calls["count"] == 2
+        assert refresh_resp.json()["items"][0]["lookup_error"] == "行情不可用"
+
+    def test_stock_summary_uses_stale_cache_before_async_refresh(self, client, monkeypatch):
+        from datetime import datetime, timedelta
+
+        from autocoin.database import SessionLocal
+        from autocoin.models.stock_query_cache import StockQueryCache
+        from autocoin.services.stock_market_service import STOCK_CACHE_TTL, StockLookupError, StockMarketService
+
+        calls = {"count": 0}
+
+        def fake_lookup(self, market, stock_id):
+            calls["count"] += 1
+            if calls["count"] > 1:
+                raise StockLookupError("行情刷新失败")
+            return {
+                "stock_name": "过期缓存股",
+                "current_price": 12.0,
+                "raw_api_source": "test.lookup",
+                "raw_api_data": {"call": calls["count"]},
+            }
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        headers = self._register_headers(client, "stockstaleprice")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "CN",
+            "stock_id": "600003",
+            "stock_amount": 2,
+            "stock_average_price": 10,
+        })
+        assert create_resp.status_code == 201
+        assert calls["count"] == 1
+
+        db = SessionLocal()
+        try:
+            cache = (
+                db.query(StockQueryCache)
+                .filter(
+                    StockQueryCache.stock_market == "CN",
+                    StockQueryCache.stock_id == "600003",
+                    StockQueryCache.query_key == "lookup",
+                )
+                .first()
+            )
+            assert cache is not None
+            cache.queried_at = datetime.utcnow() - STOCK_CACHE_TTL - timedelta(seconds=1)
+            db.commit()
+        finally:
+            db.close()
+
+        summary_resp = client.get("/api/v1/stock-management/stocks/summary", headers=headers)
+        assert summary_resp.status_code == 200
+        item = summary_resp.json()["items"][0]
+        assert calls["count"] == 1
+        assert item["current_price"] == 12.0
+        assert item["total_value"] == 24.0
+        assert item["price_from_cache"] is True
+        assert item["price_cache_stale"] is True
+        assert item["price_refresh_needed"] is True
+
+        refresh_resp = client.get("/api/v1/stock-management/stocks/summary?refresh_prices=true", headers=headers)
+        assert refresh_resp.status_code == 200
+        assert calls["count"] == 2
+        assert refresh_resp.json()["items"][0]["lookup_error"] == "行情刷新失败"
+
+    def test_stock_external_sections_use_unified_query_cache(self, client, monkeypatch):
+        from autocoin.services.stock_market_service import StockMarketService
+
+        calls = {"count": 0}
+
+        def fake_lookup(self, market, stock_id):
+            return {"stock_name": "JEPI", "current_price": 55.0}
+
+        def fake_us_sections(self, stock_id):
+            return [
+                self._section_from_call(
+                    "Yahoo Finance 基础信息",
+                    "yfinance.Ticker.get_info",
+                    stock_id,
+                    make_section,
+                )
+            ]
+
+        def make_section():
+            calls["count"] += 1
+            return [{"field": "yield", "value": calls["count"]}]
+
+        monkeypatch.setattr(StockMarketService, "_fetch_remote", fake_lookup)
+        monkeypatch.setattr(StockMarketService, "_us_external_sections", fake_us_sections)
+        headers = self._register_headers(client, "stocksectioncache")
+
+        create_resp = client.post("/api/v1/stock-management/stocks", headers=headers, json={
+            "stock_market": "US",
+            "stock_id": "JEPI",
+            "stock_amount": 1,
+            "stock_average_price": 50,
+        })
+        assert create_resp.status_code == 201
+
+        first = client.get("/api/v1/stock-management/stocks/US/JEPI/details", headers=headers)
+        second = client.get("/api/v1/stock-management/stocks/US/JEPI/details", headers=headers)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert calls["count"] == 1
+        assert first.json()["external_sections"][0]["from_cache"] is False
+        assert second.json()["external_sections"][0]["from_cache"] is True
+        assert second.json()["external_sections"][0]["rows"][0]["value"] == 1
+
+    def test_cleanup_expired_stock_api_cache(self, client):
+        from datetime import datetime, timedelta
+
+        from autocoin.database import SessionLocal
+        from autocoin.models.stock_api_cache import StockApiCache
+        from autocoin.models.stock_query_cache import StockQueryCache
+        from autocoin.services.stock_market_service import STOCK_CACHE_TTL, StockMarketService
+
+        now = datetime.utcnow()
+        db = SessionLocal()
+        try:
+            expired = StockApiCache(
+                stock_market="US",
+                stock_id="EXPIRED",
+                stock_name="Expired",
+                current_price=1.0,
+                stock_currency="USD",
+                queried_at=now - STOCK_CACHE_TTL - timedelta(seconds=1),
+                created_at=now,
+                updated_at=now,
+            )
+            fresh = StockApiCache(
+                stock_market="US",
+                stock_id="FRESH",
+                stock_name="Fresh",
+                current_price=2.0,
+                stock_currency="USD",
+                queried_at=now - STOCK_CACHE_TTL + timedelta(seconds=1),
+                created_at=now,
+                updated_at=now,
+            )
+            expired_query = StockQueryCache(
+                stock_market="US",
+                stock_id="EXPIRED",
+                query_key="external:test",
+                payload="{}",
+                queried_at=now - STOCK_CACHE_TTL - timedelta(seconds=1),
+                created_at=now,
+                updated_at=now,
+            )
+            fresh_query = StockQueryCache(
+                stock_market="US",
+                stock_id="FRESH",
+                query_key="external:test",
+                payload="{}",
+                queried_at=now - STOCK_CACHE_TTL + timedelta(seconds=1),
+                created_at=now,
+                updated_at=now,
+            )
+            db.add_all([expired, fresh, expired_query, fresh_query])
+            db.commit()
+
+            deleted = StockMarketService(db).cleanup_expired_cache(now=now)
+            db.commit()
+
+            assert deleted >= 2
+            assert db.query(StockApiCache).filter(StockApiCache.stock_id == "EXPIRED").first() is None
+            assert db.query(StockApiCache).filter(StockApiCache.stock_id == "FRESH").first() is not None
+            assert db.query(StockQueryCache).filter(StockQueryCache.stock_id == "EXPIRED").first() is None
+            assert db.query(StockQueryCache).filter(StockQueryCache.stock_id == "FRESH").first() is not None
+        finally:
+            db.close()

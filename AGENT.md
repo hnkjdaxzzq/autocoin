@@ -1,15 +1,16 @@
 # AGENT.md — Autocoin 项目指南
 
 > 本文档面向 AI 开发者，描述 Autocoin 个人记账应用的项目结构、架构模式、数据模型和关键实现细节。
-> 最后更新于 2025 年。
+> 最后更新于 2026 年。
 
 ---
 
 ## 一、项目概述
 
-**Autocoin** 是一款个人记账与统计分析 Web 应用，基于 **FastAPI（Python）后端 + 原生 JavaScript SPA 前端** 的单一仓库架构。支持支付宝/微信账单导入、**多券商收入分析**、**图片智能识别导入**（多模态 LLM）、**AI 自动分类**、**数据备份还原**、**特殊数据处理**等功能。支持多用户隔离、暗黑模式与移动端适配。
+**Autocoin** 是一款个人记账与统计分析 Web 应用，基于 **FastAPI（Python）后端 + 原生 JavaScript SPA 前端** 的单一仓库架构。支持支付宝/微信账单导入、**多券商收入分析**、**股票详情**、**图片智能识别导入**（多模态 LLM）、**AI 自动分类**、**数据备份还原**、**特殊数据处理**等功能。支持多用户隔离、暗黑模式与移动端适配。
 
 - **后端：** Python 3.9+, FastAPI, SQLAlchemy 2.0 ORM, SQLite（WAL 模式）
+- **行情依赖：** yfinance（美股 Yahoo Finance 数据）、AKShare（A 股财经数据）
 - **前端：** 原生 JS SPA（无框架）, Chart.js 图表, CSS 自定义属性暗黑模式
 - **部署：** Docker + docker-compose, 单进程同时服务 API 和静态文件, 端口 8000
 
@@ -35,13 +36,15 @@ autocoin-t/
 │   ├── auth.py                      # JWT 认证（python-jose）、bcrypt 密码哈希、依赖注入
 │   ├── database.py                  # SQLAlchemy 引擎、会话工厂、数据库初始化、轻量迁移
 │   │
-│   ├── models/                      # SQLAlchemy ORM 模型（6 张表）
+│   ├── models/                      # SQLAlchemy ORM 模型
 │   │   ├── user.py                  # 用户模型
 │   │   ├── transaction.py           # 交易记录模型（含 product_alias 字段）
 │   │   ├── classification_rule.py   # 自动分类规则模型
 │   │   ├── alias_rule.py            # 别名映射规则模型（新增）
 │   │   ├── import_batch.py          # 导入批次模型
-│   │   └── user_preference.py       # 用户偏好设置模型（key-value 存储，新增）
+│   │   ├── user_preference.py       # 用户偏好设置模型（key-value 存储，新增）
+│   │   ├── stock_data.py            # 股票录入批次数据
+│   │   └── stock_api_cache.py       # 股票接口查询缓存（TTL 3 小时）
 │   │
 │   ├── schemas/                     # Pydantic 请求/响应模型
 │   │   ├── auth.py                  # 注册/登录/改密/Token 模型
@@ -67,7 +70,8 @@ autocoin-t/
 │   ├── services/                    # 业务逻辑层
 │   │   ├── import_service.py        # 文件导入服务
 │   │   ├── image_recognizer.py      # 图片识别服务（多 LLM 降级链）
-│   │   └── stats_service.py         # 统计服务
+│   │   ├── stats_service.py         # 统计服务
+│   │   └── stock_market_service.py  # 股票行情查询与缓存服务
 │   │
 │   └── routers/                     # API 路由（全部在 /api/v1 下）
 │       ├── auth.py                  # 注册/登录/改密
@@ -77,6 +81,7 @@ autocoin-t/
 │       ├── statistics.py            # 数据统计
 │       ├── broker_income_analysis.py # 券商收入分析（新增）
 │       ├── ai_classification.py     # AI 自动分类（新增）
+│       ├── stock_management.py      # 股票详情：录入、聚合、明细分页、行情查询
 │       ├── data_management.py       # 数据备份还原（新增）
 │       └── special_data_processing.py # 特殊数据处理：退款候选匹配与确认
 │
@@ -94,6 +99,7 @@ autocoin-t/
 │       ├── rules.js                 # 规则页（分类规则 + 别名规则）
 │       ├── stats.js                 # 统计页（年度/月度/分类/钻取）
 │       ├── broker-income-analysis.js # 券商收入分析页（新增）
+│       ├── stock-management.js      # 股票详情页（新增）
 │       ├── data-management.js       # 数据管理页（备份/还原，新增）
 │       ├── special-data-processing.js # 特殊数据处理页：退款数据处理
 │       └── ai-classification.js     # AI 自动分类页（新增）
@@ -243,6 +249,36 @@ autocoin-t/
 
 > **唯一约束：** `(user_id, key)` — 每个用户每项偏好唯一。
 
+### 4.7 stockdata（股票录入批次表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| stock_vid | String(16) | UNIQUE, indexed | 64 位随机 ID 的 16 位十六进制表示 |
+| user_id | Integer | NOT NULL, indexed | 用户 ID |
+| stock_market | String(8) | NOT NULL, indexed | 市场：CN/US |
+| stock_id | String(32) | NOT NULL, indexed | 股票代码 |
+| stock_name | String(128) | NULLABLE | 股票名称 |
+| stock_alias | String(128) | NULLABLE, indexed | 别名，同用户同市场同代码最后修改会同步历史批次 |
+| stock_amount | Float | NOT NULL | 数量 |
+| stock_average_price | Float | NULLABLE | 批次平均成本 |
+| stock_currency | String(8) | NOT NULL | CN=CNY，US=USD |
+| stock_remark | Text | NULLABLE | 备注，最多 50 字 |
+| stock_transaction_date | DateTime | NULLABLE | 成交日期，用户选填 |
+| stock_entry_time | DateTime | NOT NULL | 录入时间，保存时自动写入 |
+
+### 4.8 stock_api_cache（股票行情缓存表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| stock_market | String(8) | NOT NULL, indexed | 市场：CN/US |
+| stock_id | String(32) | NOT NULL, indexed | 股票代码 |
+| stock_name | String(128) | NULLABLE | 接口返回名称 |
+| current_price | Float | NULLABLE | 实时价格 |
+| stock_currency | String(8) | NOT NULL | 币种 |
+| queried_at | DateTime | NOT NULL, indexed | 查询时间，TTL 3 小时 |
+
+> **唯一约束：** `(stock_market, stock_id)` — 同一市场同一股票只保留一份行情缓存。
+
 ---
 
 ## 五、API 路由
@@ -337,7 +373,16 @@ autocoin-t/
 | POST | `/ai-classification/classify` | 调用 DeepSeek API 进行 AI 自动分类（SSE 流式返回进度） |
 | POST | `/ai-classification/confirm` | 确认并写入 AI 分类结果 |
 
-### 5.8 数据管理 `/data-management`（新增）
+### 5.8 股票详情 `/stock-management`（新增）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/stock-management/lookup` | 查询股票名称、实时价和已有别名，行情缓存 TTL 3 小时 |
+| POST | `/stock-management/stocks` | 新增股票批次记录；查询行情失败仍允许保存；平均成本为空时优先取当前价 |
+| GET | `/stock-management/stocks/summary` | 按用户、市场、股票代码聚合资产；返回当前总价值、总成本、当前收益率、当前股价 |
+| GET | `/stock-management/stocks/{stock_market}/{stock_id}/records` | 查询某只股票批次明细，最多每页 5 条 |
+
+### 5.9 数据管理 `/data-management`（新增）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -345,7 +390,7 @@ autocoin-t/
 | POST | `/data-management/backup/validate` | 验证备份文件格式 |
 | POST | `/data-management/backup/restore` | 还原备份数据 |
 
-### 5.9 特殊数据处理 `/special-data-processing`（新增）
+### 5.10 特殊数据处理 `/special-data-processing`（新增）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -418,7 +463,7 @@ autocoin-t/
 - **验证：** 检查 CSV 版本号、表结构完整性
 - **还原：** 先按反向顺序清空所有表 → 重置 SQLite 自增计数器 → 事务性插入所有数据 → 失败回滚
 
-### 6.6 前端路由（9 个页面）
+### 6.6 前端路由（11 个页面）
 
 | 路由 | 页面 | 说明 |
 |------|------|------|
@@ -426,6 +471,7 @@ autocoin-t/
 | `#/dashboard` | 概览 | 摘要卡片 + 月度柱状图 + 分类环形图 + 近期交易 |
 | `#/transactions` | 账单明细 | 筛选/搜索/分页/行内编辑/批量操作/导出 |
 | `#/broker-income-analysis` | 券商收入分析 | 来源筛选 + 4 个图表 + 导出 |
+| `#/stock-management` | 股票详情 | 股票批次录入 + 资产聚合（当前总价值/总成本/收益率/当前股价）+ 明细展开分页 |
 | `#/import` | 导入 | 文件导入 + 图片导入 + 券商导入快捷键 |
 | `#/rules` | 规则 | 分类规则 + 别名规则双标签，带差异对比对话框 |
 | `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细 |
