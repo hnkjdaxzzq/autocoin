@@ -703,7 +703,24 @@ const StockManagement = {
 
   formatDateTime(value) {
     if (!value) return "";
-    return String(value).replace("T", " ").slice(0, 19);
+    const text = String(value).trim();
+    const hasTimezone = /(Z|[+-]\d{2}:?\d{2})$/.test(text);
+    const looksLikeDateTime = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(text);
+    const normalized = looksLikeDateTime && !hasTimezone
+      ? `${text.replace(" ", "T")}Z`
+      : text;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return text.replace("T", " ").slice(0, 19);
+    const pad = number => String(number).padStart(2, "0");
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate()),
+    ].join("-") + " " + [
+      pad(date.getHours()),
+      pad(date.getMinutes()),
+      pad(date.getSeconds()),
+    ].join(":");
   },
 
   formatDetailValue(value) {
