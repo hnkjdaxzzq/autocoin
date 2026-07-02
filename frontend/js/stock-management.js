@@ -98,7 +98,7 @@ const StockManagement = {
           </tr>
         </thead>
         <tbody>
-          ${items.length ? items.map(item => StockManagement.renderSummaryRows(item)).join("") : StockManagement.renderEmptyTableRow(15)}
+          ${items.length ? items.map((item, index) => StockManagement.renderSummaryRows(item, index)).join("") : StockManagement.renderEmptyTableRow(15)}
         </tbody>
       </table>
     `;
@@ -300,7 +300,7 @@ const StockManagement = {
     return `<tr><td class="stock-empty-table-cell" colspan="${colspan}">当前无数据</td></tr>`;
   },
 
-  renderSummaryRows(item) {
+  renderSummaryRows(item, index = 0) {
     const key = StockManagement.itemKey(item);
     const expanded = StockManagement._state.expandedKey === key;
     const page = StockManagement._state.recordPages[key];
@@ -309,8 +309,9 @@ const StockManagement = {
       ? StockManagement.inlineLoadingDots("行情刷新中")
       : "";
     const dividendLoading = item.stock_dividend_refresh_needed ? StockManagement.inlineLoadingDots("股息刷新中") : "";
+    const stripeClass = index % 2 === 0 ? "stock-row-even" : "stock-row-odd";
     return `
-      <tr class="stock-summary-row ${expanded ? "expanded" : ""}" data-key="${StockManagement.escape(key)}">
+      <tr class="stock-summary-row ${stripeClass} ${expanded ? "expanded" : ""}" data-key="${StockManagement.escape(key)}">
         <td class="stock-expand-col"><span class="stock-expand-arrow">${expanded ? "▼" : "▶"}</span></td>
         <td><strong>${StockManagement.escape(item.stock_market)} · ${StockManagement.escape(item.stock_id)}</strong>${warning}</td>
         <td>${StockManagement.escape(item.stock_name || "--")}</td>

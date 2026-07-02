@@ -22,6 +22,10 @@
   --shadow-lg: 0 8px 24px rgba(0,0,0,.1);
   --table-head-bg: #f8fafc;
   --table-hover-bg: #f8fafc;
+  --stock-row-even-bg: #fff;
+  --stock-row-odd-bg: #f9fbff;
+  --stock-record-row-even-bg: #fff;
+  --stock-record-row-odd-bg: #f8fafc;
   --input-bg: #fff;
   --gradient-primary: linear-gradient(135deg, #4f6ef7 0%, #6d8cfc 100%);
 }
@@ -44,6 +48,10 @@
   --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
   --table-head-bg: #1a2236;
   --table-hover-bg: #1a2236;
+  --stock-row-even-bg: #151c2c;
+  --stock-row-odd-bg: #172033;
+  --stock-record-row-even-bg: #151c2c;
+  --stock-record-row-odd-bg: #182238;
   --input-bg: #0f1520;
   --gradient-primary: linear-gradient(135deg, #4f6ef7 0%, #6d8cfc 100%);
   color-scheme: dark;
@@ -371,9 +379,15 @@ body {
 
 .stock-portfolio-table th,
 .stock-portfolio-table td {
+  border-right: 1px solid var(--border);
   padding: 9px 10px;
   text-align: left;
   white-space: nowrap;
+}
+
+.stock-portfolio-table th:last-child,
+.stock-portfolio-table td:last-child {
+  border-right: 0;
 }
 
 .stock-portfolio-total-row td {
@@ -446,10 +460,29 @@ body {
   cursor: pointer;
 }
 
+.stock-summary-row.stock-row-even td {
+  background: var(--stock-row-even-bg);
+}
+
+.stock-summary-row.stock-row-odd td {
+  background: var(--stock-row-odd-bg);
+}
+
+.stock-summary-row:hover td {
+  background: var(--table-hover-bg);
+  transition: background .15s ease;
+}
+
 .stock-table th,
 .stock-table td {
+  border-right: 1px solid var(--border);
   padding: 8px 9px;
   text-align: left;
+}
+
+.stock-table th:last-child,
+.stock-table td:last-child {
+  border-right: 0;
 }
 
 .stock-sort-header {
@@ -610,7 +643,26 @@ body {
 
 .stock-record-panel th,
 .stock-record-panel td {
+  border-right: 1px solid var(--border);
   padding: 7px 9px;
+}
+
+.stock-record-panel th:last-child,
+.stock-record-panel td:last-child {
+  border-right: 0;
+}
+
+.stock-record-panel tbody tr:nth-child(odd) td {
+  background: var(--stock-record-row-even-bg);
+}
+
+.stock-record-panel tbody tr:nth-child(even) td {
+  background: var(--stock-record-row-odd-bg);
+}
+
+.stock-record-panel tbody tr:hover td {
+  background: var(--table-hover-bg);
+  transition: background .15s ease;
 }
 
 .stock-record-pagination {
