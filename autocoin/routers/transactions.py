@@ -43,6 +43,7 @@ def list_transactions(
     sort_by: str = "transaction_time",
     sort_dir: str = "desc",
     include_deleted: bool = Query(False),
+    exclude_broker_withholding_tax: bool = False,
     repo: SQLiteRepository = Depends(get_repo),
 ):
     page_size = min(page_size, 200)
@@ -59,6 +60,7 @@ def list_transactions(
         sort_by=sort_by,
         sort_dir=sort_dir,
         include_deleted=include_deleted,
+        exclude_broker_withholding_tax=exclude_broker_withholding_tax,
     )
     summary = repo.get_filtered_summary(
         start_date=start_date,
@@ -69,6 +71,7 @@ def list_transactions(
         source=source,
         search=search,
         include_deleted=include_deleted,
+        exclude_broker_withholding_tax=exclude_broker_withholding_tax,
     )
     total_pages = math.ceil(total / page_size) if page_size else 1
     return TransactionListResponse(

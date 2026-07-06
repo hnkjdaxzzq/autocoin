@@ -284,6 +284,7 @@ const Stats = {
       start_date: startDate,
       end_date: endDate,
       direction: container.querySelector("#cat-direction").value,
+      ...Stats._taxParams(container),
     };
 
     el.innerHTML = `
@@ -365,6 +366,7 @@ const Stats = {
         page_size: pageSize,
         sort_by: "transaction_time",
         sort_dir: "desc",
+        exclude_broker_withholding_tax: Stats._catParams.exclude_broker_withholding_tax,
       });
 
       if (!data.items.length) {

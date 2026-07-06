@@ -310,7 +310,7 @@ autocoin-t/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/transactions` | 分页查询（日期/方向/分类/来源/搜索/排序） |
+| GET | `/transactions` | 分页查询（日期/方向/分类/来源/搜索/排序，可选去除券商预扣税记录） |
 | POST | `/transactions` | 手动创建（自动应用分类+别名规则） |
 | GET | `/transactions/{id}` | 获取单条 |
 | PUT | `/transactions/{id}` | 更新（分类/备注/方向） |

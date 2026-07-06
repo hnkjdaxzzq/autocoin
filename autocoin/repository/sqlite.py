@@ -223,6 +223,7 @@ class SQLiteRepository(DataRepository):
         source=None,
         search=None,
         include_deleted: bool = False,
+        exclude_broker_withholding_tax: bool = False,
     ):
         q = self._db.query(Transaction).filter(Transaction.user_id == self._user_id)
         if not include_deleted:
@@ -250,6 +251,8 @@ class SQLiteRepository(DataRepository):
                     Transaction.payment_method.ilike(f"%{search}%"),
                 )
             )
+        if exclude_broker_withholding_tax:
+            q = q.filter(not_(_broker_withholding_tax_filter()))
         return q
 
     def list_transactions(
@@ -266,6 +269,7 @@ class SQLiteRepository(DataRepository):
         sort_by: str = "transaction_time",
         sort_dir: str = "desc",
         include_deleted: bool = False,
+        exclude_broker_withholding_tax: bool = False,
     ) -> tuple[list[dict], int]:
         q = self._build_filter_query(
             start_date,
@@ -276,6 +280,7 @@ class SQLiteRepository(DataRepository):
             source,
             search,
             include_deleted=include_deleted,
+            exclude_broker_withholding_tax=exclude_broker_withholding_tax,
         )
 
         total = q.count()
@@ -358,6 +363,7 @@ class SQLiteRepository(DataRepository):
         source=None,
         search=None,
         include_deleted: bool = False,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
         q = self._build_filter_query(
             start_date,
@@ -368,6 +374,7 @@ class SQLiteRepository(DataRepository):
             source,
             search,
             include_deleted=include_deleted,
+            exclude_broker_withholding_tax=exclude_broker_withholding_tax,
         )
 
         income_q = q.filter(Transaction.direction == "income")

@@ -916,6 +916,19 @@ class TestStatistics:
         assert expense_items["股息收入"]["amount"] == 90.0
         assert expense_items["其他券商支出"]["amount"] == 70.0
 
+        expense_detail = client.get(
+            "/api/v1/transactions?"
+            f"{base_query}&direction=expense&category=%E8%82%A1%E6%81%AF%E6%94%B6%E5%85%A5"
+            "&exclude_broker_withholding_tax=true",
+            headers=auth_headers,
+        )
+        assert expense_detail.status_code == 200
+        detail_data = expense_detail.json()
+        assert detail_data["total"] == 1
+        assert detail_data["items"][0]["source"] == "招商证券"
+        assert detail_data["items"][0]["amount"] == 90.0
+        assert detail_data["summary"]["total_expense"] == 90.0
+
         income_category = client.get(
             f"/api/v1/statistics/category?{base_query}&direction=income&exclude_broker_withholding_tax=true",
             headers=auth_headers,

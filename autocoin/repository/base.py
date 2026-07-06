@@ -25,6 +25,7 @@ class DataRepository(ABC):
         sort_by: str = "transaction_time",
         sort_dir: str = "desc",
         include_deleted: bool = False,
+        exclude_broker_withholding_tax: bool = False,
     ) -> tuple[list[dict], int]:
         """Returns (items, total_count)."""
         ...
@@ -53,6 +54,7 @@ class DataRepository(ABC):
         source: Optional[str] = None,
         search: Optional[str] = None,
         include_deleted: bool = False,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
         """Returns aggregated income/expense/balance for filtered transactions."""
         ...
