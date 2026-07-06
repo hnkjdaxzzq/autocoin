@@ -3,7 +3,7 @@ import json
 import re
 from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -106,6 +106,22 @@ def _apply_source_filter(q, source):
     if len(sources) > 1:
         return q.filter(Transaction.source.in_(sources))
     return q
+
+
+def _broker_withholding_tax_filter():
+    return and_(
+        Transaction.direction == "expense",
+        or_(
+            and_(
+                Transaction.source == "盈透IBKR",
+                Transaction.remark.ilike("代扣税%"),
+            ),
+            and_(
+                Transaction.source == "MOOMOO",
+                Transaction.remark.ilike("非美國居民預扣稅%"),
+            ),
+        ),
+    )
 
 
 class SQLiteRepository(DataRepository):
@@ -539,6 +555,7 @@ class SQLiteRepository(DataRepository):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
         q = self._db.query(Transaction).filter(
             Transaction.is_deleted == 0,
@@ -553,12 +570,21 @@ class SQLiteRepository(DataRepository):
 
         income_q = q.filter(Transaction.direction == "income")
         expense_q = q.filter(Transaction.direction == "expense")
+        tax_q = q.filter(_broker_withholding_tax_filter())
+        tax_total = 0.0
+        tax_count = 0
+        if exclude_broker_withholding_tax:
+            tax_total = tax_q.with_entities(func.sum(Transaction.amount)).scalar() or 0.0
+            tax_count = tax_q.count()
+            expense_q = expense_q.filter(not_(_broker_withholding_tax_filter()))
 
         total_income = income_q.with_entities(func.sum(Transaction.amount)).scalar() or 0.0
         total_expense = expense_q.with_entities(func.sum(Transaction.amount)).scalar() or 0.0
         income_count = income_q.count()
         expense_count = expense_q.count()
-        total_count = q.count()
+        total_count = q.count() - tax_count
+        if exclude_broker_withholding_tax:
+            total_income -= tax_total
 
         return {
             "total_income": round(total_income, 2),
@@ -569,7 +595,12 @@ class SQLiteRepository(DataRepository):
             "expense_count": expense_count,
         }
 
-    def get_monthly_stats(self, year: int, source=None) -> list[dict]:
+    def get_monthly_stats(
+        self,
+        year: int,
+        source=None,
+        exclude_broker_withholding_tax: bool = False,
+    ) -> list[dict]:
         sources = _normalize_sources(source)
         filters = [
             Transaction.is_deleted == 0,
@@ -584,6 +615,10 @@ class SQLiteRepository(DataRepository):
         elif len(sources) > 1:
             filters.append(Transaction.source.in_(sources))
 
+        query_filters = list(filters)
+        if exclude_broker_withholding_tax:
+            query_filters.append(not_(_broker_withholding_tax_filter()))
+
         rows = (
             self._db.query(
                 func.strftime("%m", Transaction.transaction_time).label("month"),
@@ -591,10 +626,22 @@ class SQLiteRepository(DataRepository):
                 func.sum(Transaction.amount).label("total"),
                 func.count(Transaction.id).label("cnt"),
             )
-            .filter(*filters)
+            .filter(*query_filters)
             .group_by("month", Transaction.direction)
             .all()
         )
+
+        tax_rows = []
+        if exclude_broker_withholding_tax:
+            tax_rows = (
+                self._db.query(
+                    func.strftime("%m", Transaction.transaction_time).label("month"),
+                    func.sum(Transaction.amount).label("total"),
+                )
+                .filter(*filters, _broker_withholding_tax_filter())
+                .group_by("month")
+                .all()
+            )
 
         month_data: dict[int, dict] = {}
         for m in range(1, 13):
@@ -607,6 +654,10 @@ class SQLiteRepository(DataRepository):
             else:
                 month_data[m]["expense"] = round(row.total, 2)
             month_data[m]["count"] += row.cnt
+
+        for row in tax_rows:
+            m = int(row.month)
+            month_data[m]["income"] = round(month_data[m]["income"] - (row.total or 0), 2)
 
         for m in month_data.values():
             m["net"] = round(m["income"] - m["expense"], 2)
@@ -751,6 +802,7 @@ class SQLiteRepository(DataRepository):
         end_date: Optional[str] = None,
         direction: str = "expense",
         source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> list[dict]:
         q = (
             self._db.query(
@@ -770,18 +822,49 @@ class SQLiteRepository(DataRepository):
             end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
             q = q.filter(Transaction.transaction_time <= end_dt)
         q = _apply_source_filter(q, source)
+        if exclude_broker_withholding_tax and direction == "expense":
+            q = q.filter(not_(_broker_withholding_tax_filter()))
 
         rows = q.group_by(Transaction.category).order_by(func.sum(Transaction.amount).desc()).all()
 
-        grand_total = sum(r.total for r in rows) or 1.0
-        return [
+        items = [
             {
                 "category": r.category or "其他",
                 "amount": round(r.total, 2),
                 "count": r.cnt,
-                "percentage": round(r.total / grand_total * 100, 2),
+                "percentage": 0.0,
             }
             for r in rows
+        ]
+
+        if exclude_broker_withholding_tax and direction == "income":
+            tax_q = self._db.query(func.sum(Transaction.amount)).filter(
+                Transaction.is_deleted == 0,
+                Transaction.user_id == self._user_id,
+            )
+            if start_date:
+                tax_q = tax_q.filter(Transaction.transaction_time >= datetime.fromisoformat(start_date))
+            if end_date:
+                end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+                tax_q = tax_q.filter(Transaction.transaction_time <= end_dt)
+            tax_q = _apply_source_filter(tax_q, source)
+            tax_total = tax_q.filter(_broker_withholding_tax_filter()).scalar() or 0.0
+            if tax_total:
+                for item in items:
+                    if item["category"] == "股息收入":
+                        item["amount"] = round(item["amount"] - tax_total, 2)
+                        break
+
+        items.sort(key=lambda item: item["amount"], reverse=True)
+        grand_total = sum(item["amount"] for item in items) or 1.0
+        return [
+            {
+                "category": item["category"],
+                "amount": item["amount"],
+                "count": item["count"],
+                "percentage": round(item["amount"] / grand_total * 100, 2),
+            }
+            for item in items
         ]
 
     def get_daily_stats(self, year: int, month: int, source=None) -> list[dict]:

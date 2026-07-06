@@ -6,6 +6,11 @@ const Stats = {
     container.innerHTML = `
       <div class="page-header">
         <h1 class="page-title">统计分析</h1>
+        <label class="filter-switch">
+          <input type="checkbox" id="stat-exclude-broker-tax" checked>
+          <span class="filter-switch-track"></span>
+          <span class="filter-switch-label">去除券商预扣税</span>
+        </label>
       </div>
 
       <!-- Year controls -->
@@ -84,6 +89,10 @@ const Stats = {
     container.querySelector("#btn-cat").addEventListener("click", () => {
       Stats._loadCategory(container);
     });
+    container.querySelector("#stat-exclude-broker-tax").addEventListener("change", () => {
+      Stats._loadYear(container);
+      Stats._loadCategory(container);
+    });
 
     // Initial load
     Stats._loadYear(container);
@@ -105,13 +114,18 @@ const Stats = {
     container.querySelector("#monthly-title").textContent = `月度收支（${year}年）`;
 
     try {
-      const data = await API.stats.monthly(year);
+      const data = await API.stats.monthly(year, Stats._taxParams(container));
       Stats._renderYearSummary(container, data.months, year);
       Stats._renderMonthlyCharts(container, data, year);
       Stats._renderMonthlyTable(container, data.months);
     } catch (err) {
       showError(container.querySelector("#stat-monthly-table"), err.message);
     }
+  },
+
+  _taxParams(container) {
+    const enabled = container.querySelector("#stat-exclude-broker-tax")?.checked;
+    return enabled ? { exclude_broker_withholding_tax: true } : {};
   },
 
   _renderYearSummary(container, months, year) {
@@ -225,6 +239,7 @@ const Stats = {
       start_date: container.querySelector("#cat-start").value,
       end_date: container.querySelector("#cat-end").value,
       direction: container.querySelector("#cat-direction").value,
+      ...Stats._taxParams(container),
     };
 
     try {

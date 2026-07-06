@@ -76,12 +76,21 @@ class DataRepository(ABC):
 
     @abstractmethod
     def get_summary_stats(
-        self, start_date: Optional[str] = None, end_date: Optional[str] = None
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
         ...
 
     @abstractmethod
-    def get_monthly_stats(self, year: int) -> list[dict]:
+    def get_monthly_stats(
+        self,
+        year: int,
+        source=None,
+        exclude_broker_withholding_tax: bool = False,
+    ) -> list[dict]:
         ...
 
     @abstractmethod
@@ -90,6 +99,8 @@ class DataRepository(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         direction: str = "expense",
+        source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> list[dict]:
         ...
 

@@ -359,9 +359,9 @@ autocoin-t/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/statistics/summary` | 收支汇总（支持来源筛选） |
-| GET | `/statistics/monthly` | 月度统计（支持来源筛选 + 自定义日期范围） |
-| GET | `/statistics/category` | 分类统计（支持来源筛选） |
+| GET | `/statistics/summary` | 收支汇总（支持来源筛选、可选去除券商预扣税） |
+| GET | `/statistics/monthly` | 月度统计（支持来源筛选、可选去除券商预扣税） |
+| GET | `/statistics/category` | 分类统计（支持来源筛选、可选去除券商预扣税） |
 | GET | `/statistics/daily` | 每日统计（支持来源筛选） |
 
 ### 5.6 券商收入分析 `/broker-income-analysis`（新增）
@@ -485,13 +485,13 @@ autocoin-t/
 | 路由 | 页面 | 说明 |
 |------|------|------|
 | `#/login` | 登录/注册 | 含邀请码验证、实时表单校验 |
-| `#/dashboard` | 概览 | 摘要卡片 + 月度柱状图 + 分类环形图 + 近期交易 |
+| `#/dashboard` | 概览 | 摘要卡片 + 月度柱状图 + 分类环形图 + 近期交易；默认开启“去除券商预扣税”统计口径 |
 | `#/transactions` | 账单明细 | 筛选/搜索/分页/行内编辑/批量操作/导出 |
 | `#/broker-income-analysis` | 券商收入分析 | 来源筛选 + 4 个图表 + 导出 |
 | `#/stock-management` | 股票详情 | 股票批次录入 + 资产聚合 + 按币种/CNY 折算组合统计 + 明细展开分页 |
 | `#/import` | 导入 | 文件导入 + 图片导入 + 券商导入快捷键 |
 | `#/rules` | 规则 | 分类规则 + 别名规则双标签，带差异对比对话框 |
-| `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细 |
+| `#/stats` | 统计分析 | 年度/月度/分类分析，分类钻取查看明细；默认开启“去除券商预扣税”统计口径 |
 | `#/special-data-processing` | 特殊数据处理 | 退款数据处理、理财数据检查 |
 | `#/data-management` | 数据管理 | 全量备份导出/导入还原/交易管理 |
 | `#/ai-analysis` | AI 分析 | AI 自动分类（SSE 进度 + 预览确认） |

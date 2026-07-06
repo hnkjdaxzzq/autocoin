@@ -799,6 +799,134 @@ class TestTransactions:
         assert resp.status_code in (401, 403)  # No token → depends on FastAPI version
 
 
+class TestStatistics:
+    def test_exclude_broker_withholding_tax_adjusts_stats(self, client, auth_headers):
+        rows = [
+            {
+                "transaction_time": "2030-03-01 10:00:00",
+                "direction": "income",
+                "amount": 1000,
+                "category": "工资收入",
+                "source": "manual",
+                "remark": "工资",
+            },
+            {
+                "transaction_time": "2030-03-02 10:00:00",
+                "direction": "expense",
+                "amount": 200,
+                "category": "餐饮",
+                "source": "manual",
+                "remark": "午餐",
+            },
+            {
+                "transaction_time": "2030-03-03 10:00:00",
+                "direction": "income",
+                "amount": 300,
+                "category": "股息收入",
+                "source": "盈透IBKR",
+                "remark": "股息 USD 40",
+            },
+            {
+                "transaction_time": "2030-03-03 10:01:00",
+                "direction": "expense",
+                "amount": 30,
+                "category": "股息收入",
+                "source": "盈透IBKR",
+                "remark": "代扣税 USD -4",
+            },
+            {
+                "transaction_time": "2030-03-04 10:00:00",
+                "direction": "income",
+                "amount": 500,
+                "category": "股息收入",
+                "source": "MOOMOO",
+                "remark": "現金分紅 +70 USD",
+            },
+            {
+                "transaction_time": "2030-03-04 10:01:00",
+                "direction": "expense",
+                "amount": 50,
+                "category": "股息收入",
+                "source": "MOOMOO",
+                "remark": "非美國居民預扣稅 -7 USD",
+            },
+            {
+                "transaction_time": "2030-03-05 10:00:00",
+                "direction": "expense",
+                "amount": 70,
+                "category": "其他券商支出",
+                "source": "MOOMOO",
+                "remark": "其他支出",
+            },
+            {
+                "transaction_time": "2030-03-06 10:00:00",
+                "direction": "expense",
+                "amount": 90,
+                "category": "股息收入",
+                "source": "招商证券",
+                "remark": "代扣税 USD -12",
+            },
+        ]
+        for row in rows:
+            resp = client.post("/api/v1/transactions", headers=auth_headers, json=row)
+            assert resp.status_code == 201
+
+        base_query = "start_date=2030-03-01&end_date=2030-03-31"
+        default_summary = client.get(f"/api/v1/statistics/summary?{base_query}", headers=auth_headers)
+        assert default_summary.status_code == 200
+        assert default_summary.json() == {
+            "total_income": 1800.0,
+            "total_expense": 440.0,
+            "net": 1360.0,
+            "transaction_count": 8,
+            "income_count": 3,
+            "expense_count": 5,
+        }
+
+        adjusted_summary = client.get(
+            f"/api/v1/statistics/summary?{base_query}&exclude_broker_withholding_tax=true",
+            headers=auth_headers,
+        )
+        assert adjusted_summary.status_code == 200
+        assert adjusted_summary.json() == {
+            "total_income": 1720.0,
+            "total_expense": 360.0,
+            "net": 1360.0,
+            "transaction_count": 6,
+            "income_count": 3,
+            "expense_count": 3,
+        }
+
+        adjusted_monthly = client.get(
+            "/api/v1/statistics/monthly?year=2030&exclude_broker_withholding_tax=true",
+            headers=auth_headers,
+        )
+        assert adjusted_monthly.status_code == 200
+        march = adjusted_monthly.json()["months"][2]
+        assert march == {"month": 3, "income": 1720.0, "expense": 360.0, "net": 1360.0, "count": 6}
+
+        expense_category = client.get(
+            f"/api/v1/statistics/category?{base_query}&direction=expense&exclude_broker_withholding_tax=true",
+            headers=auth_headers,
+        )
+        assert expense_category.status_code == 200
+        expense_items = {item["category"]: item for item in expense_category.json()["items"]}
+        assert expense_category.json()["total"] == 360.0
+        assert expense_items["餐饮"]["amount"] == 200.0
+        assert expense_items["股息收入"]["amount"] == 90.0
+        assert expense_items["其他券商支出"]["amount"] == 70.0
+
+        income_category = client.get(
+            f"/api/v1/statistics/category?{base_query}&direction=income&exclude_broker_withholding_tax=true",
+            headers=auth_headers,
+        )
+        assert income_category.status_code == 200
+        income_items = {item["category"]: item for item in income_category.json()["items"]}
+        assert income_category.json()["total"] == 1720.0
+        assert income_items["工资收入"]["amount"] == 1000.0
+        assert income_items["股息收入"]["amount"] == 720.0
+
+
 class TestSpecialDataProcessingRefunds:
     def _create_tx(self, client, headers, **overrides):
         payload = {

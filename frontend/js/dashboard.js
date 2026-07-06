@@ -15,6 +15,11 @@ const Dashboard = {
             <input type="date" id="dash-end" value="${today}">
           </div>
         </div>
+        <label class="filter-switch">
+          <input type="checkbox" id="dash-exclude-broker-tax" checked>
+          <span class="filter-switch-track"></span>
+          <span class="filter-switch-label">去除券商预扣税</span>
+        </label>
       </div>
 
       <div class="summary-grid" id="summary-cards">
@@ -43,6 +48,9 @@ const Dashboard = {
         Dashboard._reload(container);
       });
     });
+    container.querySelector("#dash-exclude-broker-tax").addEventListener("change", () => {
+      Dashboard._reload(container);
+    });
 
     Dashboard._loadAll(container);
   },
@@ -67,12 +75,13 @@ const Dashboard = {
     const start = container.querySelector("#dash-start").value;
     const end = container.querySelector("#dash-end").value;
     const year = new Date().getFullYear();
+    const taxParams = Dashboard._taxParams(container);
 
     // Parallel fetch
     const [summary, monthly, category, recent] = await Promise.allSettled([
-      API.stats.summary({ start_date: start, end_date: end }),
-      API.stats.monthly(year),
-      API.stats.category({ start_date: start, end_date: end, direction: "expense" }),
+      API.stats.summary({ start_date: start, end_date: end, ...taxParams }),
+      API.stats.monthly(year, taxParams),
+      API.stats.category({ start_date: start, end_date: end, direction: "expense", ...taxParams }),
       API.transactions.list({ start_date: start, end_date: end, page: 1, page_size: 10 }),
     ]);
 
@@ -88,6 +97,11 @@ const Dashboard = {
     if (recent.status === "fulfilled") {
       Dashboard._renderRecent(container, recent.value.items);
     }
+  },
+
+  _taxParams(container) {
+    const enabled = container.querySelector("#dash-exclude-broker-tax")?.checked;
+    return enabled ? { exclude_broker_withholding_tax: true } : {};
   },
 
   _renderSummary(container, data) {

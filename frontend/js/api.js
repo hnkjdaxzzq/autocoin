@@ -452,7 +452,10 @@ const API = {
       apiFetch("/statistics/summary?" + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))
       )),
-    monthly: (year) => apiFetch(`/statistics/monthly?year=${year}`),
+    monthly: (year, params = {}) =>
+      apiFetch("/statistics/monthly?" + new URLSearchParams(
+        Object.fromEntries(Object.entries({ year, ...params }).filter(([, v]) => v !== null && v !== undefined && v !== ""))
+      )),
     category: (params) =>
       apiFetch("/statistics/category?" + new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""))

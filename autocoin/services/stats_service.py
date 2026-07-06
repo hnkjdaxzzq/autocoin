@@ -13,11 +13,22 @@ class StatsService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
-        return self._repo.get_summary_stats(start_date, end_date, source)
+        return self._repo.get_summary_stats(
+            start_date,
+            end_date,
+            source,
+            exclude_broker_withholding_tax,
+        )
 
-    def monthly(self, year: int, source=None) -> dict:
-        months = self._repo.get_monthly_stats(year, source)
+    def monthly(
+        self,
+        year: int,
+        source=None,
+        exclude_broker_withholding_tax: bool = False,
+    ) -> dict:
+        months = self._repo.get_monthly_stats(year, source, exclude_broker_withholding_tax)
         return {"year": year, "months": months}
 
     def category(
@@ -26,8 +37,15 @@ class StatsService:
         end_date: Optional[str] = None,
         direction: str = "expense",
         source=None,
+        exclude_broker_withholding_tax: bool = False,
     ) -> dict:
-        items = self._repo.get_category_stats(start_date, end_date, direction, source)
+        items = self._repo.get_category_stats(
+            start_date,
+            end_date,
+            direction,
+            source,
+            exclude_broker_withholding_tax,
+        )
         total = sum(i["amount"] for i in items)
         return {"items": items, "total": round(total, 2)}
 

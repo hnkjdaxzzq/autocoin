@@ -30,14 +30,20 @@ def summary(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     source: Optional[str] = None,
+    exclude_broker_withholding_tax: bool = False,
     service: StatsService = Depends(get_service),
 ):
-    return service.summary(start_date, end_date, source)
+    return service.summary(start_date, end_date, source, exclude_broker_withholding_tax)
 
 
 @router.get("/monthly", response_model=MonthlyResponse)
-def monthly(year: int, source: Optional[str] = None, service: StatsService = Depends(get_service)):
-    return service.monthly(year, source)
+def monthly(
+    year: int,
+    source: Optional[str] = None,
+    exclude_broker_withholding_tax: bool = False,
+    service: StatsService = Depends(get_service),
+):
+    return service.monthly(year, source, exclude_broker_withholding_tax)
 
 
 @router.get("/category", response_model=CategoryResponse)
@@ -46,9 +52,10 @@ def category(
     end_date: Optional[str] = None,
     direction: str = "expense",
     source: Optional[str] = None,
+    exclude_broker_withholding_tax: bool = False,
     service: StatsService = Depends(get_service),
 ):
-    return service.category(start_date, end_date, direction, source)
+    return service.category(start_date, end_date, direction, source, exclude_broker_withholding_tax)
 
 
 @router.get("/daily", response_model=DailyResponse)
